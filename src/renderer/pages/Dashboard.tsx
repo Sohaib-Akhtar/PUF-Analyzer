@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Container, 
   Title, 
@@ -37,6 +37,25 @@ const StatCard: React.FC<{
 );
 
 export const Dashboard: React.FC = () => {
+  const [deviceCount, setDeviceCount] = useState<number>(0);
+  const [dbStatus, setDbStatus] = useState<'online' | 'offline' | 'loading'>('loading');
+
+  const loadDashboardData = async () => {
+    try {
+      // Test database connectivity and get device count
+      const devices = await window.electron.database.getAllDevices();
+      setDeviceCount(devices.length);
+      setDbStatus('online');
+    } catch (error) {
+      console.error('Failed to load dashboard data:', error);
+      setDbStatus('offline');
+    }
+  };
+
+  useEffect(() => {
+    loadDashboardData();
+  }, []);
+
   return (
     <Container size="xl" py="md">
       <Stack gap="lg">
@@ -53,9 +72,8 @@ export const Dashboard: React.FC = () => {
           <Grid.Col span={{ base: 12, md: 6 }}>
             <StatCard
               title="Total Devices"
-              value="12"
+              value={deviceCount.toString()}
               icon={ComputerDesktopIcon}
-              progress={75}
             />
           </Grid.Col>
           
@@ -69,6 +87,7 @@ export const Dashboard: React.FC = () => {
           </Grid.Col>
         </Grid>
         
+        {/* Recent Activity - Commented out for now
         <Grid>
           <Grid.Col span={{ base: 12, lg: 8 }}>
             <Card shadow="sm" padding="lg" radius="md" withBorder>
@@ -93,7 +112,10 @@ export const Dashboard: React.FC = () => {
               </Stack>
             </Card>
           </Grid.Col>
+        </Grid>
+        */}
           
+        <Grid>
           <Grid.Col span={{ base: 12, lg: 4 }}>
             <Card shadow="sm" padding="lg" radius="md" withBorder>
               <Group justify="space-between" mb="md">
@@ -104,15 +126,12 @@ export const Dashboard: React.FC = () => {
               <Stack gap="sm">
                 <Group justify="space-between">
                   <Text size="sm">Database</Text>
-                  <Text size="sm" c="green">Online</Text>
-                </Group>
-                <Group justify="space-between">
-                  <Text size="sm">Analysis Engine</Text>
-                  <Text size="sm" c="green">Running</Text>
-                </Group>
-                <Group justify="space-between">
-                  <Text size="sm">Storage</Text>
-                  <Text size="sm" c="yellow">75% Used</Text>
+                  <Text 
+                    size="sm" 
+                    c={dbStatus === 'online' ? 'green' : dbStatus === 'offline' ? 'red' : 'yellow'}
+                  >
+                    {dbStatus === 'online' ? 'Online' : dbStatus === 'offline' ? 'Offline' : 'Loading...'}
+                  </Text>
                 </Group>
               </Stack>
             </Card>
