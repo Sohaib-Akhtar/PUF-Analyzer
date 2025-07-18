@@ -2,7 +2,6 @@ import { app, BrowserWindow, shell, session } from 'electron';
 import { join } from 'path';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import { initDatabase, closeDatabase } from '../database/connection';
-import { runMigrations } from '../database/migrations';
 import { setupIpcHandlers } from './ipc';
 
 let mainWindow: BrowserWindow | null = null;
@@ -61,8 +60,7 @@ app.whenReady().then(() => {
 
   // Initialize database
   try {
-    const db = initDatabase();
-    runMigrations(db);
+    initDatabase();
     console.log('Database initialized successfully');
     
     // Setup IPC handlers only after database is initialized
