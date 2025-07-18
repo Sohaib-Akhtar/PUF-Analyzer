@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "outDir": "dist/renderer",
+    "jsx": "react-jsx",
+    "types": ["node", "react", "react-dom"],
+    "allowImportingTsExtensions": true,
+    "noEmit": true
+  },
+  "include": ["src/renderer/**/*", "src/shared/**/*"],
+  "exclude": ["src/main/**/*", "src/database/**/*"]
+}
