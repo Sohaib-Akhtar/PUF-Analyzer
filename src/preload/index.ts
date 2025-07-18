@@ -5,21 +5,15 @@ const api = {
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   getPlatform: () => ipcRenderer.invoke('get-platform'),
   
-  // Database operations (to be expanded)
+  // Database operations
   database: {
-    // User operations
-    createUser: (userData: any) => ipcRenderer.invoke('database:create-user', userData),
-    getUser: (id: number) => ipcRenderer.invoke('database:get-user', id),
-    getAllUsers: () => ipcRenderer.invoke('database:get-all-users'),
-    updateUser: (id: number, userData: any) => ipcRenderer.invoke('database:update-user', id, userData),
-    deleteUser: (id: number) => ipcRenderer.invoke('database:delete-user', id),
-    
     // Device operations
     createDevice: (deviceData: any) => ipcRenderer.invoke('database:create-device', deviceData),
     getDevice: (id: number) => ipcRenderer.invoke('database:get-device', id),
     getAllDevices: () => ipcRenderer.invoke('database:get-all-devices'),
     updateDevice: (id: number, deviceData: any) => ipcRenderer.invoke('database:update-device', id, deviceData),
     deleteDevice: (id: number) => ipcRenderer.invoke('database:delete-device', id),
+    searchDevices: (searchTerm: string) => ipcRenderer.invoke('database:search-devices', searchTerm),
     
     // File operations
     createFile: (fileData: any) => ipcRenderer.invoke('database:create-file', fileData),

@@ -1,16 +1,16 @@
 import { ipcMain, dialog } from 'electron';
 import { readFile, writeFile } from 'fs/promises';
 import { getDatabase } from '../../database/connection';
-import { UserService } from '../../database/services/userService';
-import { CreateUserDto, CreateDeviceDto, CreateFileDto } from '../../shared/types/database';
+import { DeviceService } from '../../database/services/deviceService';
+import { CreateDeviceDto, CreateFileDto } from '../../shared/types/database';
 
 export const setupIpcHandlers = (): void => {
   let db: any = null;
-  let userService: UserService | null = null;
+  let deviceService: DeviceService | null = null;
   
   try {
     db = getDatabase();
-    userService = new UserService(db);
+    deviceService = new DeviceService(db);
   } catch (error) {
     console.warn('Database not available for IPC handlers');
   }
@@ -24,86 +24,71 @@ export const setupIpcHandlers = (): void => {
     return process.platform;
   });
 
-  // User database operations
-  ipcMain.handle('database:create-user', async (_, userData: CreateUserDto) => {
-    if (!userService) {
-      throw new Error('Database not available');
-    }
-    try {
-      return await userService.createUser(userData);
-    } catch (error) {
-      throw new Error(`Failed to create user: ${error}`);
-    }
-  });
-
-  ipcMain.handle('database:get-user', async (_, id: number) => {
-    if (!userService) {
-      throw new Error('Database not available');
-    }
-    try {
-      return userService.getUserById(id);
-    } catch (error) {
-      throw new Error(`Failed to get user: ${error}`);
-    }
-  });
-
-  ipcMain.handle('database:get-all-users', async () => {
-    if (!userService) {
-      throw new Error('Database not available');
-    }
-    try {
-      return userService.getAllUsers();
-    } catch (error) {
-      throw new Error(`Failed to get users: ${error}`);
-    }
-  });
-
-  ipcMain.handle('database:update-user', async (_, id: number, userData: Partial<CreateUserDto>) => {
-    if (!userService) {
-      throw new Error('Database not available');
-    }
-    try {
-      return userService.updateUser(id, userData);
-    } catch (error) {
-      throw new Error(`Failed to update user: ${error}`);
-    }
-  });
-
-  ipcMain.handle('database:delete-user', async (_, id: number) => {
-    if (!userService) {
-      throw new Error('Database not available');
-    }
-    try {
-      return userService.deleteUser(id);
-    } catch (error) {
-      throw new Error(`Failed to delete user: ${error}`);
-    }
-  });
-
-  // Device database operations (placeholder - to be implemented)
+  // Device database operations
   ipcMain.handle('database:create-device', async (_, deviceData: CreateDeviceDto) => {
-    // TODO: Implement device service
-    throw new Error('Device operations not implemented yet');
+    if (!deviceService) {
+      throw new Error('Database not available');
+    }
+    try {
+      return await deviceService.createDevice(deviceData);
+    } catch (error) {
+      throw new Error(`Failed to create device: ${error}`);
+    }
   });
 
   ipcMain.handle('database:get-device', async (_, id: number) => {
-    // TODO: Implement device service
-    throw new Error('Device operations not implemented yet');
+    if (!deviceService) {
+      throw new Error('Database not available');
+    }
+    try {
+      return deviceService.getDeviceById(id);
+    } catch (error) {
+      throw new Error(`Failed to get device: ${error}`);
+    }
   });
 
   ipcMain.handle('database:get-all-devices', async () => {
-    // TODO: Implement device service
-    throw new Error('Device operations not implemented yet');
+    if (!deviceService) {
+      throw new Error('Database not available');
+    }
+    try {
+      return deviceService.getAllDevices();
+    } catch (error) {
+      throw new Error(`Failed to get devices: ${error}`);
+    }
   });
 
   ipcMain.handle('database:update-device', async (_, id: number, deviceData: Partial<CreateDeviceDto>) => {
-    // TODO: Implement device service
-    throw new Error('Device operations not implemented yet');
+    if (!deviceService) {
+      throw new Error('Database not available');
+    }
+    try {
+      return deviceService.updateDevice(id, deviceData);
+    } catch (error) {
+      throw new Error(`Failed to update device: ${error}`);
+    }
   });
 
   ipcMain.handle('database:delete-device', async (_, id: number) => {
-    // TODO: Implement device service
-    throw new Error('Device operations not implemented yet');
+    if (!deviceService) {
+      throw new Error('Database not available');
+    }
+    try {
+      return deviceService.deleteDevice(id);
+    } catch (error) {
+      throw new Error(`Failed to delete device: ${error}`);
+    }
+  });
+
+  ipcMain.handle('database:search-devices', async (_, searchTerm: string) => {
+    if (!deviceService) {
+      throw new Error('Database not available');
+    }
+    try {
+      return deviceService.searchDevices(searchTerm);
+    } catch (error) {
+      throw new Error(`Failed to search devices: ${error}`);
+    }
   });
 
   // File database operations (placeholder - to be implemented)
