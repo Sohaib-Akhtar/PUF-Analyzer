@@ -12,7 +12,7 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { 
-  ComputerDesktopIcon, 
+  CpuChipIcon, 
   DocumentIcon,
   TrashIcon
 } from '@heroicons/react/24/outline';
@@ -99,7 +99,7 @@ export const Dashboard: React.FC = () => {
             <StatCard
               title="Total Devices"
               value={deviceCount.toString()}
-              icon={ComputerDesktopIcon}
+              icon={CpuChipIcon}
             />
           </Grid.Col>
           
