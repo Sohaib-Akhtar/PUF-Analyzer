@@ -14,13 +14,14 @@ const api = {
     updateDevice: (id: number, deviceData: any) => ipcRenderer.invoke('database:update-device', id, deviceData),
     deleteDevice: (id: number) => ipcRenderer.invoke('database:delete-device', id),
     searchDevices: (searchTerm: string) => ipcRenderer.invoke('database:search-devices', searchTerm),
+    getDeviceWithReadings: (deviceId: number) => ipcRenderer.invoke('database:get-device-with-readings', deviceId),
     
-    // File operations
-    createFile: (fileData: any) => ipcRenderer.invoke('database:create-file', fileData),
-    getFile: (id: number) => ipcRenderer.invoke('database:get-file', id),
-    getAllFiles: () => ipcRenderer.invoke('database:get-all-files'),
-    updateFile: (id: number, fileData: any) => ipcRenderer.invoke('database:update-file', id, fileData),
-    deleteFile: (id: number) => ipcRenderer.invoke('database:delete-file', id),
+    // PUF Reading operations
+    getDeviceReadings: (deviceId: number) => ipcRenderer.invoke('database:get-device-readings', deviceId),
+    deleteReading: (readingId: number) => ipcRenderer.invoke('database:delete-reading', readingId),
+    searchReadings: (searchTerm: string) => ipcRenderer.invoke('database:search-readings', searchTerm),
+    getReadingCount: () => ipcRenderer.invoke('database:get-reading-count'),
+    resetDatabase: () => ipcRenderer.invoke('database:reset'),
   },
   
   // File system operations
@@ -29,6 +30,8 @@ const api = {
     selectDirectory: () => ipcRenderer.invoke('filesystem:select-directory'),
     readFile: (filePath: string) => ipcRenderer.invoke('filesystem:read-file', filePath),
     writeFile: (filePath: string, content: string) => ipcRenderer.invoke('filesystem:write-file', filePath, content),
+    uploadPufFiles: () => ipcRenderer.invoke('filesystem:upload-puf-files'),
+    downloadReading: (readingId: number, format: 'bin' | 'txt') => ipcRenderer.invoke('filesystem:download-reading', readingId, format),
   }
 };
 

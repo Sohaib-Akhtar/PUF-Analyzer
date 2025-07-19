@@ -1,23 +1,29 @@
 import { ipcMain, dialog } from 'electron';
 import { readFile, writeFile } from 'fs/promises';
-import { getDatabase } from '../../database/connection';
+import { getDatabase, resetDatabase } from '../../database/connection';
 import { DeviceService } from '../../database/services/deviceService';
-import { CreateDeviceDto, CreateFileDto } from '../../shared/types/database';
+import { PufReadingService } from '../../database/services/pufReadingService';
+import { FileUploadService } from '../../database/services/fileUploadService';
+import { CreateDeviceDto } from '../../shared/types/database';
 
 export const setupIpcHandlers = (): void => {
   let db: any = null;
   let deviceService: DeviceService | null = null;
+  let pufReadingService: PufReadingService | null = null;
+  let fileUploadService: FileUploadService | null = null;
   
   try {
     db = getDatabase();
     deviceService = new DeviceService(db);
+    pufReadingService = new PufReadingService(db);
+    fileUploadService = new FileUploadService(db);
   } catch (error) {
     console.warn('Database not available for IPC handlers');
   }
 
   // App info handlers
   ipcMain.handle('get-app-version', () => {
-    return process.env.npm_package_version || '1.0.0';
+    return process.env['npm_package_version'] || '1.0.0';
   });
 
   ipcMain.handle('get-platform', () => {
@@ -30,7 +36,7 @@ export const setupIpcHandlers = (): void => {
       throw new Error('Database not available');
     }
     try {
-      return await deviceService.createDevice(deviceData);
+      return deviceService.createDevice(deviceData);
     } catch (error) {
       throw new Error(`Failed to create device: ${error}`);
     }
@@ -91,33 +97,128 @@ export const setupIpcHandlers = (): void => {
     }
   });
 
-  // File database operations (placeholder - to be implemented)
-  ipcMain.handle('database:create-file', async (_, fileData: CreateFileDto) => {
-    // TODO: Implement file service
-    throw new Error('File operations not implemented yet');
+  // PUF Reading operations
+  ipcMain.handle('database:get-device-readings', async (_, deviceId: number) => {
+    if (!pufReadingService) {
+      throw new Error('Database not available');
+    }
+    try {
+      return pufReadingService.getReadingsByDeviceId(deviceId);
+    } catch (error) {
+      throw new Error(`Failed to get device readings: ${error}`);
+    }
   });
 
-  ipcMain.handle('database:get-file', async (_, id: number) => {
-    // TODO: Implement file service
-    throw new Error('File operations not implemented yet');
+  ipcMain.handle('database:get-device-with-readings', async (_, deviceId: number) => {
+    if (!deviceService) {
+      throw new Error('Database not available');
+    }
+    try {
+      return deviceService.getDeviceWithReadings(deviceId);
+    } catch (error) {
+      throw new Error(`Failed to get device with readings: ${error}`);
+    }
   });
 
-  ipcMain.handle('database:get-all-files', async () => {
-    // TODO: Implement file service
-    throw new Error('File operations not implemented yet');
+  ipcMain.handle('database:delete-reading', async (_, readingId: number) => {
+    if (!pufReadingService) {
+      throw new Error('Database not available');
+    }
+    try {
+      return pufReadingService.deleteReading(readingId);
+    } catch (error) {
+      throw new Error(`Failed to delete reading: ${error}`);
+    }
   });
 
-  ipcMain.handle('database:update-file', async (_, id: number, fileData: Partial<CreateFileDto>) => {
-    // TODO: Implement file service
-    throw new Error('File operations not implemented yet');
+  ipcMain.handle('database:search-readings', async (_, searchTerm: string) => {
+    if (!pufReadingService) {
+      throw new Error('Database not available');
+    }
+    try {
+      return pufReadingService.searchReadings(searchTerm);
+    } catch (error) {
+      throw new Error(`Failed to search readings: ${error}`);
+    }
   });
 
-  ipcMain.handle('database:delete-file', async (_, id: number) => {
-    // TODO: Implement file service
-    throw new Error('File operations not implemented yet');
+  ipcMain.handle('database:get-reading-count', async () => {
+    if (!pufReadingService) {
+      throw new Error('Database not available');
+    }
+    try {
+      return pufReadingService.getReadingCount();
+    } catch (error) {
+      throw new Error(`Failed to get reading count: ${error}`);
+    }
+  });
+
+  ipcMain.handle('database:reset', async () => {
+    try {
+      resetDatabase();
+      
+      db = getDatabase();
+      deviceService = new DeviceService(db);
+      pufReadingService = new PufReadingService(db);
+      fileUploadService = new FileUploadService(db);
+      
+      return { success: true, message: 'Database reset successfully' };
+    } catch (error) {
+      throw new Error(`Failed to reset database: ${error}`);
+    }
   });
 
   // File system operations
+  // File upload operations
+  ipcMain.handle('filesystem:upload-puf-files', async () => {
+    try {
+      const result = await dialog.showOpenDialog({
+        properties: ['openFile', 'multiSelections'],
+        filters: [
+          { name: 'PUF Files', extensions: ['bin', 'txt'] },
+          { name: 'Binary Files', extensions: ['bin'] },
+          { name: 'Text Files', extensions: ['txt'] },
+        ],
+      });
+
+      if (!result.canceled && result.filePaths.length > 0) {
+        if (!fileUploadService) {
+          throw new Error('File upload service not available');
+        }
+        return fileUploadService.uploadFiles(result.filePaths);
+      }
+      return [];
+    } catch (error) {
+      throw new Error(`Failed to upload PUF files: ${error}`);
+    }
+  });
+
+  ipcMain.handle('filesystem:download-reading', async (_, readingId: number, format: 'bin' | 'txt' = 'bin') => {
+    try {
+      if (!fileUploadService) {
+        throw new Error('File upload service not available');
+      }
+      
+      const { content, filename } = fileUploadService.generateDownloadContent(readingId, format);
+      
+      const result = await dialog.showSaveDialog({
+        defaultPath: filename,
+        filters: [
+          { name: format.toUpperCase() + ' Files', extensions: [format] },
+          { name: 'All Files', extensions: ['*'] },
+        ],
+      });
+
+      if (!result.canceled && result.filePath) {
+        await writeFile(result.filePath, content, 'utf8');
+        return result.filePath;
+      }
+      return null;
+    } catch (error) {
+      throw new Error(`Failed to download reading: ${error}`);
+    }
+  });
+
   ipcMain.handle('filesystem:select-file', async () => {
     try {
       const result = await dialog.showOpenDialog({
