@@ -71,7 +71,14 @@ export const theme = createTheme({
     AppShell: {
       styles: {
         root: {
-          backgroundColor: 'var(--mantine-color-gray-0)',
+          backgroundColor: 'var(--mantine-color-body)',
+        }
+      }
+    },
+    Container: {
+      styles: {
+        root: {
+          backgroundColor: 'var(--mantine-color-body)',
         }
       }
     }

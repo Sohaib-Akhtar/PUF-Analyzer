@@ -1,8 +1,11 @@
 import React from 'react';
-import { Group, Text, TextInput } from '@mantine/core';
-import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { Group, Text, ActionIcon } from '@mantine/core';
+import { SunIcon, MoonIcon } from '@heroicons/react/24/outline';
+import { useTheme } from '@/renderer/providers/ThemeProvider';
 
 export const Header: React.FC = () => {
+  const { colorScheme, toggleColorScheme } = useTheme();
+
   return (
     <Group h="100%" px="md" justify="space-between">
       <Group>
@@ -12,12 +15,18 @@ export const Header: React.FC = () => {
       </Group>
       
       <Group>
-        <TextInput
-          placeholder="Search..."
-          size="sm"
-          leftSection={<MagnifyingGlassIcon style={{ width: '1rem', height: '1rem' }} />}
-          w={250}
-        />
+        <ActionIcon
+          onClick={toggleColorScheme}
+          variant="subtle"
+          size="lg"
+          aria-label="Toggle color scheme"
+        >
+          {colorScheme === 'dark' ? (
+            <SunIcon style={{ width: '1.2rem', height: '1.2rem' }} />
+          ) : (
+            <MoonIcon style={{ width: '1.2rem', height: '1.2rem' }} />
+          )}
+        </ActionIcon>
       </Group>
     </Group>
   );
