@@ -55,7 +55,7 @@ pnpm package
 
 This will create distributable packages in the `dist-electron` directory.
 
-## Project Structure
+## Preliminary Project Structure
 
 ```
 src/
@@ -75,7 +75,6 @@ src/
 ├── database/           # Database related code
 │   ├── connection.ts   # Database connection
 │   ├── schema.sql      # Database schema
-│   ├── migrations/     # Database migrations
 │   └── services/       # Database services
 └── shared/             # Shared utilities and types
 ```
@@ -84,27 +83,14 @@ src/
 
 The application uses SQLite with the following schema:
 
-- **Users**: Store user information
 - **Devices**: Store PUF device information
-- **Files**: Store file metadata and paths
-
-Database migrations are automatically applied on application startup.
-
-## Security
-
-The application implements several security measures:
-
-- **Context Isolation**: Enabled in renderer process
-- **Node Integration**: Disabled in renderer process
-- **Content Security Policy**: Strict CSP headers
-- **Secure IPC**: All communication through secure IPC channels
-- **External Navigation**: Blocked and opened in external browser
+- **Files**: Store file metadata and paths, in reference to devices table
 
 ## Navigation
 
 The application includes a sidebar navigation with the following sections:
 
-- **Dashboard**: Overview and statistics
+- **Dashboard**: Overview
 - **Devices**: Manage PUF devices
 
 ## License
