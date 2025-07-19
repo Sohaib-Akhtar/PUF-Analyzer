@@ -37,7 +37,6 @@
     "@mantine/hooks": "^8.1.3",
     "@mantine/notifications": "^8.1.3",
     "better-sqlite3": "^12.2.0",
-    "electron": "^37.2.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.7.0"
@@ -53,6 +52,7 @@
     "@typescript-eslint/parser": "^8.37.0",
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.21",
+    "electron": "^37.2.3",
     "electron-builder": "^26.0.12",
     "electron-vite": "^4.0.0",
     "eslint": "^9.31.0",
@@ -67,16 +67,19 @@
   },
   "build": {
     "appId": "com.puf-analyzer.desktop",
-    "productName": "PUF Analyzer Desktop",
+    "productName": "PUF GUI",
     "directories": {
       "output": "dist-electron"
     },
     "files": [
-      "dist/**/*",
-      "node_modules/**/*"
+      "out/**/*",
+      "node_modules/**/*",
+      "public/**/*"
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
+      "icon": "public/chip.png",
+      "identity": null,
       "target": {
         "target": "dmg",
         "arch": [
@@ -87,11 +90,12 @@
     },
     "win": {
       "target": "nsis",
-      "icon": "resources/icon.ico"
+      "icon": "public/chip.png"
     },
     "linux": {
       "target": "AppImage",
-      "category": "Development"
+      "category": "Development",
+      "icon": "public/chip.png"
     }
   }
 }

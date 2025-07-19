@@ -6,6 +6,7 @@ pnpm-lock.yaml
 dist/
 build/
 out/
+dist-electron/
 
 # OS files
 .DS_Store

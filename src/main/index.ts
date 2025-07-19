@@ -16,7 +16,8 @@ const createWindow = (): void => {
     show: false,
     autoHideMenuBar: true,
     titleBarStyle: 'hiddenInset',
-    icon: join(__dirname, '../../resources/icon.png'),
+    title: 'PUF GUI',
+    icon: join(__dirname, '../../public/chip.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -43,6 +44,9 @@ const createWindow = (): void => {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
   }
 };
+
+// Set app name BEFORE initialization (affects userData path)
+app.setName('PUF GUI');
 
 // This method will be called when Electron has finished initialization
 app.whenReady().then(() => {
