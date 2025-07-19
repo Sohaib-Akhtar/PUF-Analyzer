@@ -20,9 +20,11 @@ import {
   PencilIcon, 
   TrashIcon, 
   MagnifyingGlassIcon,
-  ExclamationTriangleIcon 
+  ExclamationTriangleIcon,
+  DocumentTextIcon 
 } from '@heroicons/react/24/outline';
 import { DeviceModal } from '../components/DeviceModal';
+import { ReadingsModal } from '../components/ReadingsModal';
 import { Device, CreateDeviceDto } from '../../shared/types/database';
 import { notifications } from '@mantine/notifications';
 
@@ -32,6 +34,8 @@ export const Devices: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [modalOpened, setModalOpened] = useState(false);
   const [editingDevice, setEditingDevice] = useState<Device | null>(null);
+  const [readingsModalOpened, setReadingsModalOpened] = useState(false);
+  const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [error, setError] = useState<string>('');
 
   const loadDevices = async () => {
@@ -76,6 +80,11 @@ export const Devices: React.FC = () => {
   const handleEditDevice = (device: Device) => {
     setEditingDevice(device);
     setModalOpened(true);
+  };
+
+  const handleViewReadings = (device: Device) => {
+    setSelectedDevice(device);
+    setReadingsModalOpened(true);
   };
 
   const handleDeleteDevice = async (device: Device) => {
@@ -198,7 +207,15 @@ export const Devices: React.FC = () => {
           <Grid>
             {devices.map((device) => (
               <Grid.Col key={device.id} span={{ base: 12, sm: 6, lg: 4 }}>
-                <Card shadow="sm" padding="lg" radius="md" withBorder h="100%">
+                <Card 
+                  shadow="sm" 
+                  padding="lg" 
+                  radius="md" 
+                  withBorder 
+                  h="100%" 
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => handleViewReadings(device)}
+                >
                   <Stack gap="sm" h="100%">
                     <Group justify="space-between" align="flex-start">
                       <div style={{ flex: 1 }}>
@@ -226,6 +243,13 @@ export const Devices: React.FC = () => {
                       </Text>
                     )}
 
+                    <Group>
+                      <DocumentTextIcon style={{ width: '1rem', height: '1rem' }} />
+                      <Text size="sm" fw={500}>
+                        {device.readings_count || 0} readings
+                      </Text>
+                    </Group>
+
                     <div style={{ marginTop: 'auto' }}>
                       <Text size="xs" c="dimmed" mb="sm">
                         Created: {formatDate(device.created_at)}
@@ -235,7 +259,10 @@ export const Devices: React.FC = () => {
                         <ActionIcon
                           variant="light"
                           color="blue"
-                          onClick={() => handleEditDevice(device)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditDevice(device);
+                          }}
                           title="Edit device"
                         >
                           <PencilIcon style={{ width: '1rem', height: '1rem' }} />
@@ -243,7 +270,10 @@ export const Devices: React.FC = () => {
                         <ActionIcon
                           variant="light"
                           color="red"
-                          onClick={() => handleDeleteDevice(device)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteDevice(device);
+                          }}
                           title="Delete device"
                         >
                           <TrashIcon style={{ width: '1rem', height: '1rem' }} />
@@ -261,8 +291,15 @@ export const Devices: React.FC = () => {
           opened={modalOpened}
           onClose={() => setModalOpened(false)}
           onSave={handleSaveDevice}
+          onRefresh={loadDevices}
           device={editingDevice}
           title={editingDevice ? 'Edit Device' : 'Add New Device'}
+        />
+
+        <ReadingsModal
+          opened={readingsModalOpened}
+          onClose={() => setReadingsModalOpened(false)}
+          device={selectedDevice}
         />
       </Stack>
     </Container>

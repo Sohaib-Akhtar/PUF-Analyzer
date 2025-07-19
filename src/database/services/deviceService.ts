@@ -1,21 +1,22 @@
 import { Database } from 'better-sqlite3';
-import { Device, CreateDeviceDto } from '../../shared/types/database';
+import { Device, CreateDeviceDto, DeviceWithReadings, PufReading } from '../../shared/types/database';
 
 export class DeviceService {
   constructor(private db: Database) {}
 
-  async createDevice(deviceData: CreateDeviceDto): Promise<Device> {
+  createDevice(deviceData: CreateDeviceDto): Device {
     try {
       const statement = this.db.prepare(`
-        INSERT INTO devices (name, description, device_type, status) 
-        VALUES (?, ?, ?, ?)
+        INSERT INTO devices (name, description, device_type, status, readings_count) 
+        VALUES (?, ?, ?, ?, ?)
       `);
       
       const result = statement.run(
         deviceData.name, 
         deviceData.description || null,
         deviceData.device_type || null,
-        deviceData.status || 'active'
+        deviceData.status || 'active',
+        0
       );
       
       if (result.changes === 0) {
@@ -120,5 +121,36 @@ export class DeviceService {
     const statement = this.db.prepare('SELECT COUNT(*) as count FROM devices');
     const result = statement.get() as { count: number };
     return result.count;
+  }
+
+  getDeviceByName(name: string): Device | null {
+    const statement = this.db.prepare('SELECT * FROM devices WHERE name = ?');
+    const device = statement.get(name) as Device | undefined;
+    return device || null;
+  }
+
+  getDeviceWithReadings(id: number): DeviceWithReadings {
+    const device = this.getDeviceById(id);
+    const readingsStatement = this.db.prepare('SELECT * FROM puf_readings WHERE device_id = ? ORDER BY upload_date DESC');
+    const readings = readingsStatement.all(id) as PufReading[];
+    
+    return {
+      ...device,
+      readings
+    };
+  }
+
+  createOrGetDevice(name: string, deviceType?: string): Device {
+    const existingDevice = this.getDeviceByName(name);
+    if (existingDevice) {
+      return existingDevice;
+    }
+
+    return this.createDevice({
+      name,
+      device_type: deviceType || 'unknown',
+      description: `Auto-created device from file upload`,
+      status: 'active'
+    });
   }
 }

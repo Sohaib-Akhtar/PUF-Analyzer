@@ -4,15 +4,19 @@ export interface Device {
   description?: string;
   device_type?: string;
   status: string;
+  readings_count: number;
   created_at: string;
 }
 
-export interface FileRecord {
+export interface PufReading {
   id: number;
-  filename: string;
   device_id: number;
-  file_path: string;
-  created_at: string;
+  filename: string;
+  original_filename: string;
+  binary_data: string;
+  file_size: number;
+  file_extension: string;
+  upload_date: string;
 }
 
 export interface CreateDeviceDto {
@@ -22,8 +26,22 @@ export interface CreateDeviceDto {
   status?: string;
 }
 
-export interface CreateFileDto {
-  filename: string;
+export interface CreatePufReadingDto {
   device_id: number;
-  file_path: string;
+  filename: string;
+  original_filename: string;
+  binary_data: string;
+  file_size: number;
+  file_extension: string;
+}
+
+export interface DeviceWithReadings extends Device {
+  readings: PufReading[];
+}
+
+export interface FileUploadResult {
+  success: boolean;
+  deviceName: string;
+  readingsAdded: number;
+  errors?: string[];
 }

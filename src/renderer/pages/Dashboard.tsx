@@ -7,11 +7,14 @@ import {
   Card, 
   Group, 
   Progress, 
-  Stack 
+  Stack,
+  Button 
 } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { 
   ComputerDesktopIcon, 
-  DocumentIcon
+  DocumentIcon,
+  TrashIcon
 } from '@heroicons/react/24/outline';
 
 const StatCard: React.FC<{ 
@@ -38,17 +41,40 @@ const StatCard: React.FC<{
 
 export const Dashboard: React.FC = () => {
   const [deviceCount, setDeviceCount] = useState<number>(0);
+  const [readingCount, setReadingCount] = useState<number>(0);
   const [dbStatus, setDbStatus] = useState<'online' | 'offline' | 'loading'>('loading');
 
   const loadDashboardData = async () => {
     try {
-      // Test database connectivity and get device count
+      // Test database connectivity and get counts
       const devices = await window.electron.database.getAllDevices();
+      const totalReadings = await window.electron.database.getReadingCount();
       setDeviceCount(devices.length);
+      setReadingCount(totalReadings);
       setDbStatus('online');
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
       setDbStatus('offline');
+    }
+  };
+
+  const handleResetDatabase = async () => {
+    if (window.confirm('Are you sure you want to reset the database? This will delete all devices and readings.')) {
+      try {
+        await window.electron.database.resetDatabase();
+        notifications.show({
+          title: 'Database Reset',
+          message: 'Database has been reset successfully',
+          color: 'green'
+        });
+        loadDashboardData();
+      } catch (error) {
+        notifications.show({
+          title: 'Reset Failed',
+          message: `Failed to reset database: ${error}`,
+          color: 'red'
+        });
+      }
     }
   };
 
@@ -79,10 +105,9 @@ export const Dashboard: React.FC = () => {
           
           <Grid.Col span={{ base: 12, md: 6 }}>
             <StatCard
-              title="Analyzed Files"
-              value="1,234"
+              title="PUF Readings"
+              value={readingCount.toLocaleString()}
               icon={DocumentIcon}
-              progress={90}
             />
           </Grid.Col>
         </Grid>
@@ -133,6 +158,16 @@ export const Dashboard: React.FC = () => {
                     {dbStatus === 'online' ? 'Online' : dbStatus === 'offline' ? 'Offline' : 'Loading...'}
                   </Text>
                 </Group>
+                <Button
+                  leftSection={<TrashIcon style={{ width: '1rem', height: '1rem' }} />}
+                  onClick={handleResetDatabase}
+                  color="red"
+                  variant="light"
+                  size="sm"
+                  fullWidth
+                >
+                  Reset Database
+                </Button>
               </Stack>
             </Card>
           </Grid.Col>
