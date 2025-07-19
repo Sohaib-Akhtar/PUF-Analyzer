@@ -3,59 +3,64 @@ import { app } from 'electron';
 import { join } from 'path';
 import { readFileSync, existsSync } from 'fs';
 
+const DB_NAME = 'puf-analyzer.db';
+const SCHEMA_PATHS = [
+  'schema.sql',
+  join('..', '..', 'src', 'database', 'schema.sql')
+];
+
+const INLINE_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS devices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    device_type TEXT,
+    status TEXT DEFAULT 'active',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  
+  CREATE TABLE IF NOT EXISTS files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    filename TEXT NOT NULL,
+    device_id INTEGER NOT NULL,
+    file_path TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
+  );
+  
+  CREATE INDEX IF NOT EXISTS idx_files_device_id ON files(device_id);
+  CREATE INDEX IF NOT EXISTS idx_devices_name ON devices(name);
+`;
+
 let db: Database.Database | null = null;
+
+const configureDatabase = (database: Database.Database): void => {
+  database.exec('PRAGMA foreign_keys = ON;');
+};
+
+const initializeSchema = (database: Database.Database): void => {
+  for (const relativePath of SCHEMA_PATHS) {
+    const schemaPath = join(__dirname, relativePath);
+    if (existsSync(schemaPath)) {
+      const schema = readFileSync(schemaPath, 'utf8');
+      database.exec(schema);
+      return;
+    }
+  }
+  
+  database.exec(INLINE_SCHEMA);
+};
 
 export const initDatabase = (): Database.Database => {
   if (db) {
     return db;
   }
 
-  const dbPath = join(app.getPath('userData'), 'puf-analyzer.db');
+  const dbPath = join(app.getPath('userData'), DB_NAME);
   db = new Database(dbPath);
 
-  // Enable foreign keys
-  db.exec('PRAGMA foreign_keys = ON;');
-
-  // Read and execute schema
-  let schemaPath = join(__dirname, 'schema.sql');
-  
-  // Try different paths for development vs production
-  if (!existsSync(schemaPath)) {
-    schemaPath = join(__dirname, '..', '..', 'src', 'database', 'schema.sql');
-  }
-  
-  if (!existsSync(schemaPath)) {
-    // If schema file doesn't exist, create tables inline
-    console.log('Schema file not found, creating tables inline');
-    db.exec(`
-      -- Devices table
-      CREATE TABLE IF NOT EXISTS devices (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL,
-          description TEXT,
-          device_type TEXT,
-          status TEXT DEFAULT 'active',
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
-
-      -- Files table
-      CREATE TABLE IF NOT EXISTS files (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          filename TEXT NOT NULL,
-          device_id INTEGER NOT NULL,
-          file_path TEXT NOT NULL,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
-      );
-
-      -- Create indexes for better performance
-      CREATE INDEX IF NOT EXISTS idx_files_device_id ON files(device_id);
-      CREATE INDEX IF NOT EXISTS idx_devices_name ON devices(name);
-    `);
-  } else {
-    const schema = readFileSync(schemaPath, 'utf8');
-    db.exec(schema);
-  }
+  configureDatabase(db);
+  initializeSchema(db);
 
   return db;
 };
@@ -74,34 +79,22 @@ export const closeDatabase = (): void => {
   }
 };
 
-export const executeQuery = (query: string, params?: any[]): any => {
+export const executeQuery = <T = Record<string, unknown>>(query: string, params?: unknown[]): T[] => {
   try {
     const database = getDatabase();
     const statement = database.prepare(query);
-    
-    if (params) {
-      return statement.all(params);
-    } else {
-      return statement.all();
-    }
+    return params ? statement.all(params) as T[] : statement.all() as T[];
   } catch (error) {
-    console.error('Database query error:', error);
-    throw error;
+    throw new Error(`Database query failed: ${error}`);
   }
 };
 
-export const executeStatement = (query: string, params?: any[]): Database.RunResult => {
+export const executeStatement = (query: string, params?: unknown[]): Database.RunResult => {
   try {
     const database = getDatabase();
     const statement = database.prepare(query);
-    
-    if (params) {
-      return statement.run(params);
-    } else {
-      return statement.run();
-    }
+    return params ? statement.run(params) : statement.run();
   } catch (error) {
-    console.error('Database statement error:', error);
-    throw error;
+    throw new Error(`Database statement failed: ${error}`);
   }
 };
