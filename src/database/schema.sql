@@ -39,3 +39,31 @@ BEGIN
         SELECT COUNT(*) FROM puf_readings WHERE device_id = OLD.device_id
     ) WHERE id = OLD.device_id;
 END;
+
+CREATE TABLE IF NOT EXISTS puf_analysis_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    device_id INTEGER NOT NULL,
+    analysis_type TEXT NOT NULL,
+    parameters TEXT NOT NULL,
+    result_data TEXT NOT NULL,
+    execution_time INTEGER NOT NULL,
+    files_used TEXT NOT NULL,
+    status TEXT DEFAULT 'completed',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS puf_analysis_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    analysis_id INTEGER NOT NULL,
+    filename TEXT NOT NULL,
+    file_size INTEGER NOT NULL,
+    file_hash TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (analysis_id) REFERENCES puf_analysis_results(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_analysis_device_id ON puf_analysis_results(device_id);
+CREATE INDEX IF NOT EXISTS idx_analysis_type ON puf_analysis_results(analysis_type);
+CREATE INDEX IF NOT EXISTS idx_analysis_created_at ON puf_analysis_results(created_at);
+CREATE INDEX IF NOT EXISTS idx_analysis_files_analysis_id ON puf_analysis_files(analysis_id);

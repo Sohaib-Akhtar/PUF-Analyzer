@@ -4,6 +4,8 @@ import { contextBridge, ipcRenderer } from 'electron';
 const api = {
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   getPlatform: () => ipcRenderer.invoke('get-platform'),
+  getApiServerUrl: () => ipcRenderer.invoke('get-api-server-url'),
+  getApiServerPort: () => ipcRenderer.invoke('get-api-server-port'),
   
   // Database operations
   database: {

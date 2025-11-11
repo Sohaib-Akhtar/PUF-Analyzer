@@ -30,6 +30,14 @@ export const setupIpcHandlers = (): void => {
     return process.platform;
   });
 
+  ipcMain.handle('get-api-server-url', () => {
+    return process.env['PUF_API_URL'] || null;
+  });
+
+  ipcMain.handle('get-api-server-port', () => {
+    return process.env['PUF_API_PORT'] || null;
+  });
+
   // Device database operations
   ipcMain.handle('database:create-device', async (_, deviceData: CreateDeviceDto) => {
     if (!deviceService) {

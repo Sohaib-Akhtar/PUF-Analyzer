@@ -3,8 +3,10 @@ import { join } from 'path';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import { initDatabase, closeDatabase } from '../database/connection';
 import { setupIpcHandlers } from './ipc';
+import { PufApiServer } from './api/server';
 
 let mainWindow: BrowserWindow | null = null;
+let apiServer: PufApiServer | null = null;
 
 const createWindow = (): void => {
   // Create the browser window
@@ -74,6 +76,29 @@ app.whenReady().then(() => {
     console.log('Application will start without database functionality');
   }
 
+  // Initialize and start API server
+  try {
+    apiServer = new PufApiServer({
+      port: 0,
+      host: 'localhost',
+      isDev: is.dev
+    });
+    
+    apiServer.start().then((port) => {
+      console.log(`PUF API Server started on port ${port}`);
+      
+      // Store the API port for the renderer process
+      process.env.PUF_API_PORT = port.toString();
+      process.env.PUF_API_URL = `http://localhost:${port}`;
+    }).catch((error) => {
+      console.error('Failed to start PUF API server:', error);
+      apiServer = null;
+    });
+  } catch (error) {
+    console.error('API server initialization failed:', error);
+    console.log('Application will start without API server functionality');
+  }
+
   createWindow();
 
   app.on('activate', () => {
@@ -84,17 +109,35 @@ app.whenReady().then(() => {
 });
 
 // Quit when all windows are closed, except on macOS
-app.on('window-all-closed', () => {
+app.on('window-all-closed', async () => {
   if (process.platform !== 'darwin') {
-    closeDatabase();
+    await shutdownServices();
     app.quit();
   }
 });
 
-// Close database when app is about to quit
-app.on('before-quit', () => {
-  closeDatabase();
+// Close database and stop API server when app is about to quit
+app.on('before-quit', async () => {
+  await shutdownServices();
 });
+
+async function shutdownServices(): Promise<void> {
+  if (apiServer) {
+    try {
+      await apiServer.stop();
+      console.log('API server stopped successfully');
+    } catch (error) {
+      console.error('Error stopping API server:', error);
+    }
+  }
+  
+  try {
+    closeDatabase();
+    console.log('Database closed successfully');
+  } catch (error) {
+    console.error('Error closing database:', error);
+  }
+}
 
 // Security setup function
 const setupSecurityPolicies = (): void => {
