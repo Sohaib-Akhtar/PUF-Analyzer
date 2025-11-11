@@ -45,3 +45,44 @@ export interface FileUploadResult {
   readingsAdded: number;
   errors?: string[];
 }
+
+export interface PufAnalysisResult {
+  id: number;
+  device_id: number;
+  analysis_type: string;
+  parameters: string;
+  result_data: string;
+  execution_time: number;
+  files_used: string;
+  status: string;
+  created_at: string;
+}
+
+export interface PufAnalysisFile {
+  id: number;
+  analysis_id: number;
+  filename: string;
+  file_size: number;
+  file_hash: string;
+  created_at: string;
+}
+
+export interface CreatePufAnalysisDto {
+  device_id: number;
+  analysis_type: 'metrics' | 'stable' | 'extract' | 'convert';
+  parameters: Record<string, unknown>;
+  result_data: Record<string, unknown>;
+  execution_time: number;
+  files_used: string[];
+}
+
+export interface CreatePufAnalysisFileDto {
+  analysis_id: number;
+  filename: string;
+  file_size: number;
+  file_hash: string;
+}
+
+export interface AnalysisWithFiles extends PufAnalysisResult {
+  files: PufAnalysisFile[];
+}
