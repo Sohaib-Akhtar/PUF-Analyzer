@@ -1,6 +1,8 @@
 # PUF Analyzer Desktop
 
-A modern Electron desktop application for PUF (Physically Unclonable Function) analysis built with React, TypeScript, and Tailwind CSS.
+A modern Electron desktop application for PUF (Physically Unclonable Function) analysis.
+
+![alt text](6C0B30F3-C937-4EA2-971D-1BEBF74820EA_1_201_a.jpeg)
 
 ## Tech Stack
 
