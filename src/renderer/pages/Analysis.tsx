@@ -24,7 +24,8 @@ import {
   Collapse,
   Tooltip,
   SegmentedControl,
-  Checkbox
+  Checkbox,
+  Radio
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import {
@@ -225,21 +226,23 @@ const DeviceReadingsPicker: React.FC<{
   }, [selectedDeviceId]);
 
   const toggleReading = (reading: ReadingInfo) => {
-    const exists = files.some(f => f.name === reading.filename);
-    if (exists) {
-      setFiles(prev => prev.filter(f => f.name !== reading.filename));
-    } else {
-      const entry: FileEntry = {
-        name: reading.filename,
-        data: btoa(reading.binary_data), // binary_data is cleaned binary string -> base64
-        size: reading.file_size,
-      };
-      if (multiple) {
-        setFiles(prev => [...prev, entry]);
+    setFiles(prev => {
+      const exists = prev.some(f => f.name === reading.filename);
+      if (exists) {
+        return prev.filter(f => f.name !== reading.filename);
       } else {
-        setFiles([entry]);
+        const entry: FileEntry = {
+          name: reading.filename,
+          data: btoa(reading.binary_data),
+          size: reading.file_size,
+        };
+        if (multiple) {
+          return [...prev, entry];
+        } else {
+          return [entry];
+        }
       }
-    }
+    });
   };
 
   const selectAll = () => {
@@ -292,7 +295,7 @@ const DeviceReadingsPicker: React.FC<{
               const isSelected = files.some(f => f.name === r.filename);
               return (
                 <Group key={r.id} gap="xs" style={{ cursor: 'pointer' }} onClick={() => toggleReading(r)}>
-                  <Checkbox checked={isSelected} onChange={() => toggleReading(r)} size="xs" />
+                  <Checkbox checked={isSelected} onChange={() => {}} size="xs" style={{ pointerEvents: 'none' }} />
                   <Badge variant={isSelected ? 'filled' : 'light'} size="sm">{r.original_filename}</Badge>
                   <Text size="xs" c="dimmed">{(r.file_size / 1024).toFixed(1)} KB</Text>
                   <Text size="xs" c="dimmed">({new Date(r.upload_date).toLocaleDateString()})</Text>
@@ -309,6 +312,234 @@ const DeviceReadingsPicker: React.FC<{
   );
 };
 
+// ─── Inter/Intra device picker for Metrics ───
+const InterIntraDevicePicker: React.FC<{
+  files: FileEntry[];
+  setFiles: React.Dispatch<React.SetStateAction<FileEntry[]>>;
+}> = ({ files, setFiles }) => {
+  const [mode, setMode] = useState<string>('intra');
+  const [devices, setDevices] = useState<DeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
+  const [selectedDeviceIds, setSelectedDeviceIds] = useState<string[]>([]);
+  const [allReadings, setAllReadings] = useState<Map<number, ReadingInfo[]>>(new Map());
+  const [loadingDevices, setLoadingDevices] = useState(false);
+  const [loadingReadings, setLoadingReadings] = useState(false);
+
+  useEffect(() => {
+    const loadDevices = async () => {
+      setLoadingDevices(true);
+      try {
+        const all = await window.electron.database.getAllDevices();
+        setDevices(all.filter((d: DeviceInfo) => d.readings_count > 0));
+      } catch (e) {
+        showError('Failed to load devices', e);
+      } finally {
+        setLoadingDevices(false);
+      }
+    };
+    loadDevices();
+  }, []);
+
+  // Reset selections when switching mode
+  useEffect(() => {
+    setFiles([]);
+    setSelectedDeviceId(null);
+    setSelectedDeviceIds([]);
+    setAllReadings(new Map());
+  }, [mode]);
+
+  // Load readings for intra-device mode (single device)
+  useEffect(() => {
+    if (mode !== 'intra' || !selectedDeviceId) return;
+    const load = async () => {
+      setLoadingReadings(true);
+      try {
+        const readings = await window.electron.database.getDeviceReadings(Number(selectedDeviceId));
+        setAllReadings(new Map([[Number(selectedDeviceId), readings]]));
+      } catch (e) {
+        showError('Failed to load readings', e);
+      } finally {
+        setLoadingReadings(false);
+      }
+    };
+    load();
+  }, [mode, selectedDeviceId]);
+
+  // Load readings for inter-device mode (multiple devices)
+  useEffect(() => {
+    if (mode !== 'inter' || selectedDeviceIds.length === 0) return;
+    const load = async () => {
+      setLoadingReadings(true);
+      try {
+        const newMap = new Map<number, ReadingInfo[]>();
+        for (const id of selectedDeviceIds) {
+          const readings = await window.electron.database.getDeviceReadings(Number(id));
+          newMap.set(Number(id), readings);
+        }
+        setAllReadings(newMap);
+      } catch (e) {
+        showError('Failed to load readings', e);
+      } finally {
+        setLoadingReadings(false);
+      }
+    };
+    load();
+  }, [mode, selectedDeviceIds]);
+
+  const toggleReading = (reading: ReadingInfo) => {
+    setFiles(prev => {
+      const exists = prev.some(f => f.name === reading.filename);
+      if (exists) {
+        return prev.filter(f => f.name !== reading.filename);
+      } else {
+        const entry: FileEntry = {
+          name: reading.filename,
+          data: btoa(reading.binary_data),
+          size: reading.file_size,
+        };
+        return [...prev, entry];
+      }
+    });
+  };
+
+  const selectAllFromDevice = (deviceId: number) => {
+    const readings = allReadings.get(deviceId) || [];
+    const entries: FileEntry[] = readings.map(r => ({
+      name: r.filename,
+      data: btoa(r.binary_data),
+      size: r.file_size,
+    }));
+    // Add entries not yet in files
+    setFiles(prev => {
+      const existingNames = new Set(prev.map(f => f.name));
+      const newEntries = entries.filter(e => !existingNames.has(e.name));
+      return [...prev, ...newEntries];
+    });
+  };
+
+  const toggleDevice = (deviceId: string) => {
+    setSelectedDeviceIds(prev => {
+      if (prev.includes(deviceId)) {
+        // When unchecking a device, also remove its readings from files
+        const readings = allReadings.get(Number(deviceId)) || [];
+        const names = new Set(readings.map(r => r.filename));
+        setFiles(prevFiles => prevFiles.filter(f => !names.has(f.name)));
+        return prev.filter(id => id !== deviceId);
+      }
+      return [...prev, deviceId];
+    });
+  };
+
+  if (loadingDevices) return <Loader size="sm" />;
+
+  if (devices.length === 0) {
+    return (
+      <Alert color="yellow" icon={<ExclamationTriangleIcon style={{ width: '1rem' }} />}>
+        No devices with readings found. Upload PUF readings on the Devices page first.
+      </Alert>
+    );
+  }
+
+  const readingsForDisplay = Array.from(allReadings.entries());
+
+  return (
+    <Stack gap="sm">
+      <Radio.Group
+        value={mode}
+        onChange={(v) => setMode(v)}
+        label="Comparison Mode"
+        description={mode === 'intra'
+          ? 'Compare readings within the same device (reliability)'
+          : 'Compare readings across different devices (uniqueness)'
+        }
+      >
+        <Group mt="xs">
+          <Radio value="intra" label="Intra-device" />
+          <Radio value="inter" label="Inter-device" />
+        </Group>
+      </Radio.Group>
+
+      {mode === 'intra' ? (
+        <Select
+          label="Select Device"
+          placeholder="Choose a device..."
+          data={devices.map(d => ({
+            value: String(d.id),
+            label: `${d.name}${d.device_type ? ` (${d.device_type})` : ''} — ${d.readings_count} reading(s)`
+          }))}
+          value={selectedDeviceId}
+          onChange={(v) => { setSelectedDeviceId(v); setFiles([]); }}
+          searchable
+          leftSection={<ServerIcon style={{ width: '1rem' }} />}
+        />
+      ) : (
+        <Stack gap="xs">
+          <Text size="sm" fw={500}>Select Devices (2 or more)</Text>
+          {devices.map(d => (
+            <Group key={d.id} gap="xs" style={{ cursor: 'pointer' }} onClick={() => toggleDevice(String(d.id))}>
+              <Checkbox
+                checked={selectedDeviceIds.includes(String(d.id))}
+                onChange={() => toggleDevice(String(d.id))}
+                size="xs"
+              />
+              <Text size="sm">
+                {d.name}{d.device_type ? ` (${d.device_type})` : ''} — {d.readings_count} reading(s)
+              </Text>
+            </Group>
+          ))}
+          {selectedDeviceIds.length > 0 && selectedDeviceIds.length < 2 && (
+            <Text size="xs" c="orange">Select at least 2 devices for inter-device comparison</Text>
+          )}
+        </Stack>
+      )}
+
+      {loadingReadings && <Loader size="sm" />}
+
+      {readingsForDisplay.map(([deviceId, readings]) => {
+        const device = devices.find(d => d.id === deviceId);
+        if (!readings || readings.length === 0) return null;
+        return (
+          <Card withBorder p="xs" key={deviceId}>
+            <Group justify="space-between" mb="xs">
+              <Group gap="xs">
+                <CircleStackIcon style={{ width: '0.9rem' }} />
+                <Text size="sm" fw={500}>
+                  {device?.name || `Device ${deviceId}`}
+                  {device?.device_type && <Text span size="xs" c="dimmed"> ({device.device_type})</Text>}
+                </Text>
+                <Badge size="xs" variant="light">{readings.length} readings</Badge>
+              </Group>
+              <Group gap="xs">
+                <Button size="xs" variant="subtle" onClick={() => selectAllFromDevice(deviceId)}>Select all</Button>
+                <Button size="xs" variant="subtle" color="red" onClick={() => {
+                  const names = new Set(readings.map(r => r.filename));
+                  setFiles(prev => prev.filter(f => !names.has(f.name)));
+                }}>Clear</Button>
+              </Group>
+            </Group>
+            <Stack gap={4}>
+              {readings.map(r => {
+                const isSelected = files.some(f => f.name === r.filename);
+                return (
+                  <Group key={r.id} gap="xs" style={{ cursor: 'pointer' }} onClick={() => toggleReading(r)}>
+                    <Checkbox checked={isSelected} onChange={() => {}} size="xs" style={{ pointerEvents: 'none' }} />
+                    <Badge variant={isSelected ? 'filled' : 'light'} size="sm">{r.original_filename}</Badge>
+                    <Text size="xs" c="dimmed">{(r.file_size / 1024).toFixed(1)} KB</Text>
+                  </Group>
+                );
+              })}
+            </Stack>
+          </Card>
+        );
+      })}
+
+      {files.length > 0 && (
+        <Text size="xs" c="teal">{files.length} reading(s) selected from {mode === 'intra' ? '1 device' : `${selectedDeviceIds.length} device(s)`}</Text>
+      )}
+    </Stack>
+  );
+};
+
 // ─── Combined file source selector (upload or from device) ───
 const FileSourceSelector: React.FC<{
   files: FileEntry[];
@@ -317,7 +548,8 @@ const FileSourceSelector: React.FC<{
   multiple?: boolean;
   label?: string;
   showDeviceOption?: boolean;
-}> = ({ files, setFiles, accept, multiple = true, label = 'Upload Files', showDeviceOption = true }) => {
+  metricsMode?: boolean;
+}> = ({ files, setFiles, accept, multiple = true, label = 'Upload Files', showDeviceOption = true, metricsMode = false }) => {
   const [source, setSource] = useState<string>('upload');
 
   const handleSourceChange = (value: string) => {
@@ -340,6 +572,8 @@ const FileSourceSelector: React.FC<{
       )}
       {source === 'upload' ? (
         <FileUploadZone files={files} setFiles={setFiles} accept={accept} multiple={multiple} label={label} />
+      ) : metricsMode ? (
+        <InterIntraDevicePicker files={files} setFiles={setFiles} />
       ) : (
         <DeviceReadingsPicker files={files} setFiles={setFiles} multiple={multiple} />
       )}
@@ -431,7 +665,7 @@ const MetricsTab: React.FC = () => {
   return (
     <Stack>
       <Text size="sm" c="dimmed">Compute PUF quality metrics (Hamming weight, entropy, bitflip %) across binary memory dumps.</Text>
-      <FileSourceSelector files={files} setFiles={setFiles} accept=".bin,.txt" />
+      <FileSourceSelector files={files} setFiles={setFiles} accept=".bin,.txt" metricsMode />
       <Group>
         <Switch label="Only Total" checked={onlyTotal} onChange={(e) => setOnlyTotal(e.currentTarget.checked)} />
         <Switch label="Find Comma" checked={findComma} onChange={(e) => setFindComma(e.currentTarget.checked)} />

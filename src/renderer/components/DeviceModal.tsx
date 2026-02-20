@@ -28,6 +28,9 @@ interface DeviceModalProps {
 }
 
 const deviceTypes = [
+  { value: 'sram', label: 'SRAM' },
+  { value: 'dram', label: 'DRAM' },
+  { value: 'flash', label: 'Flash Memory' },
   { value: 'fpga', label: 'FPGA' },
   { value: 'microcontroller', label: 'Microcontroller' },
   { value: 'soc', label: 'System on Chip' },
