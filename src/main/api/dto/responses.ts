@@ -59,6 +59,76 @@ export interface ConversionResultDto {
   executionTime: number;
 }
 
+export interface GeneratedFileDto {
+  filename: string;
+  content: string; // base64 encoded
+  size: number;
+}
+
+export interface HexConversionResultDto {
+  outputFiles: string[];
+  inputFormat: string;
+  outputFormat: string;
+  filesProcessed: number;
+  executionTime: number;
+  generatedFiles?: GeneratedFileDto[];
+}
+
+export interface ImageConversionResultDto {
+  outputFiles: string[];
+  inputFormat: string;
+  outputFormat: string;
+  filesProcessed: number;
+  executionTime: number;
+  generatedFiles?: GeneratedFileDto[];
+}
+
+export interface AugmentResultDto {
+  filesProcessed: number;
+  augmentFactor: number;
+  generatedFiles: GeneratedFileDto[];
+  executionTime: number;
+}
+
+export interface CorruptResultDto {
+  filesProcessed: number;
+  corruptPercentage: number;
+  generatedFiles: GeneratedFileDto[];
+  executionTime: number;
+}
+
+export interface FixLFResultDto {
+  filesProcessed: number;
+  generatedFiles: GeneratedFileDto[];
+  executionTime: number;
+}
+
+export interface NistTestResultDto {
+  testName: string;
+  pValue: number;
+  passed: boolean;
+}
+
+export interface NistAverageResultDto {
+  tests: NistTestResultDto[];
+  outputFile: string;
+  filesProcessed: number;
+  executionTime: number;
+}
+
+export interface RandomDataResultDto {
+  generatedFiles: GeneratedFileDto[];
+  bits: number;
+  executionTime: number;
+}
+
+export interface RepeatedDataResultDto {
+  generatedFile: GeneratedFileDto;
+  bits: number;
+  pattern: string;
+  executionTime: number;
+}
+
 export interface AnalysisJobResultDto {
   jobId: string;
   status: 'pending' | 'running' | 'completed' | 'failed';

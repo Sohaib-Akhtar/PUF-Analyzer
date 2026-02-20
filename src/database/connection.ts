@@ -123,6 +123,8 @@ export const executeStatement = (query: string, params?: unknown[]): Database.Ru
 export const resetDatabase = (): void => {
   const database = getDatabase();
   
+  database.exec('DROP TABLE IF EXISTS puf_analysis_files');
+  database.exec('DROP TABLE IF EXISTS puf_analysis_results');
   database.exec('DROP TABLE IF EXISTS puf_readings');
   database.exec('DROP TABLE IF EXISTS devices');
   

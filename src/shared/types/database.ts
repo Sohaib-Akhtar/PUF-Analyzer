@@ -69,7 +69,7 @@ export interface PufAnalysisFile {
 
 export interface CreatePufAnalysisDto {
   device_id: number;
-  analysis_type: 'metrics' | 'stable' | 'extract' | 'convert';
+  analysis_type: 'metrics' | 'stable' | 'extract' | 'convert' | 'hex' | 'image' | 'augment' | 'corrupt' | 'fixlf' | 'nist' | 'random' | 'repeated';
   parameters: Record<string, unknown>;
   result_data: Record<string, unknown>;
   execution_time: number;

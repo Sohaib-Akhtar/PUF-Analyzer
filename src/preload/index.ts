@@ -34,6 +34,40 @@ const api = {
     writeFile: (filePath: string, content: string) => ipcRenderer.invoke('filesystem:write-file', filePath, content),
     uploadPufFiles: () => ipcRenderer.invoke('filesystem:upload-puf-files'),
     downloadReading: (readingId: number, format: 'bin' | 'txt') => ipcRenderer.invoke('filesystem:download-reading', readingId, format),
+  },
+
+  // Analysis operations (Java CLI bridge)
+  analysis: {
+    // Core PUF operations
+    runMetrics: (params: any) => ipcRenderer.invoke('analysis:run-metrics', params),
+    generateStable: (params: any) => ipcRenderer.invoke('analysis:generate-stable', params),
+    extractKey: (params: any) => ipcRenderer.invoke('analysis:extract-key', params),
+
+    // Conversion operations
+    convertBinary: (params: any) => ipcRenderer.invoke('analysis:convert-binary', params),
+    convertHex: (params: any) => ipcRenderer.invoke('analysis:convert-hex', params),
+    convertImage: (params: any) => ipcRenderer.invoke('analysis:convert-image', params),
+
+    // Data manipulation
+    augmentData: (params: any) => ipcRenderer.invoke('analysis:augment-data', params),
+    corruptData: (params: any) => ipcRenderer.invoke('analysis:corrupt-data', params),
+    fixLineFeeds: (params: any) => ipcRenderer.invoke('analysis:fix-line-feeds', params),
+
+    // NIST tests
+    nistAverage: (params: any) => ipcRenderer.invoke('analysis:nist-average', params),
+
+    // Data generation
+    generateRandom: (params: any) => ipcRenderer.invoke('analysis:generate-random', params),
+    generateRepeated: (params: any) => ipcRenderer.invoke('analysis:generate-repeated', params),
+
+    // Analysis persistence
+    saveResult: (data: any) => ipcRenderer.invoke('analysis:save-result', data),
+    getResult: (id: number) => ipcRenderer.invoke('analysis:get-result', id),
+    getDeviceHistory: (deviceId: number) => ipcRenderer.invoke('analysis:get-device-history', deviceId),
+    getRecent: (limit?: number) => ipcRenderer.invoke('analysis:get-recent', limit),
+    getCount: () => ipcRenderer.invoke('analysis:get-count'),
+    deleteResult: (id: number) => ipcRenderer.invoke('analysis:delete-result', id),
+    search: (searchTerm: string) => ipcRenderer.invoke('analysis:search', searchTerm),
   }
 };
 

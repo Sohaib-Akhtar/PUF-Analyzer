@@ -62,10 +62,10 @@ export async function fileRoutes(fastify: FastifyInstance) {
             data: {
               type: 'object',
               properties: {
-                validation: { type: 'object' },
+                validation: { type: 'object', additionalProperties: true },
                 uploadedFiles: {
                   type: 'array',
-                  items: { type: 'object' }
+                  items: { type: 'object', additionalProperties: true }
                 }
               }
             },
@@ -155,7 +155,7 @@ export async function fileRoutes(fastify: FastifyInstance) {
           type: 'object',
           properties: {
             success: { type: 'boolean' },
-            data: { type: 'object' },
+            data: { type: 'object', additionalProperties: true },
             timestamp: { type: 'string' }
           }
         }
@@ -214,8 +214,8 @@ export async function fileRoutes(fastify: FastifyInstance) {
                   type: 'array',
                   items: { type: 'string' }
                 },
-                binaryFormat: { type: 'object' },
-                namingConvention: { type: 'object' },
+                binaryFormat: { type: 'object', additionalProperties: true },
+                namingConvention: { type: 'object', additionalProperties: true },
                 maxFileSize: { type: 'string' },
                 validationRules: {
                   type: 'array',

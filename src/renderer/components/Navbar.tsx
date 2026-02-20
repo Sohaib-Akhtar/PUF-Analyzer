@@ -3,12 +3,14 @@ import { NavLink, Stack, Group, Text } from '@mantine/core';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   ChartBarIcon, 
-  CpuChipIcon
+  CpuChipIcon,
+  BeakerIcon
 } from '@heroicons/react/24/outline';
 
 const navigationItems = [
   { path: '/dashboard', label: 'Dashboard', icon: ChartBarIcon },
   { path: '/devices', label: 'Devices', icon: CpuChipIcon },
+  { path: '/analysis', label: 'Analysis', icon: BeakerIcon },
 ];
 
 export const Navbar: React.FC = () => {

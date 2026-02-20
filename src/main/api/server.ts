@@ -9,6 +9,9 @@ import { stableRoutes } from './routes/stable';
 import { extractRoutes } from './routes/extract';
 import { convertRoutes } from './routes/convert';
 import { fileRoutes } from './routes/files';
+import { dataRoutes } from './routes/data';
+import { generateRoutes } from './routes/generate';
+import { nistRoutes } from './routes/nist';
 
 export interface ServerConfig {
   port: number;
@@ -94,7 +97,7 @@ export class PufApiServer {
           version: '1.0.0',
           timestamp: new Date().toISOString(),
           uptime: process.uptime(),
-          services: ['metrics', 'stable', 'extract', 'convert', 'files']
+          services: ['metrics', 'stable', 'extract', 'convert', 'files', 'data', 'generate', 'nist']
         },
         timestamp: new Date().toISOString()
       });
@@ -112,6 +115,14 @@ export class PufApiServer {
             'POST /api/stable/generate': 'Generate stable positions',
             'POST /api/extract/key': 'Extract key from binary data',
             'POST /api/convert/binary': 'Convert binary data',
+            'POST /api/convert/hex': 'Convert hex data',
+            'POST /api/convert/image': 'Convert between binary and images',
+            'POST /api/data/augment': 'Augment PUF data for ML',
+            'POST /api/data/corrupt': 'Generate corrupted PUF data',
+            'POST /api/data/fixlf': 'Fix line feeds in binary dumps',
+            'POST /api/generate/random': 'Generate random binary data',
+            'POST /api/generate/repeated': 'Generate repeated pattern data',
+            'POST /api/nist/average': 'Average NIST test results',
             'POST /api/files/upload': 'Upload and validate files',
             'GET /health': 'Health check',
             'GET /docs': 'API documentation'
@@ -126,6 +137,9 @@ export class PufApiServer {
     await this.fastify.register(extractRoutes, { prefix: '/api/extract' });
     await this.fastify.register(convertRoutes, { prefix: '/api/convert' });
     await this.fastify.register(fileRoutes, { prefix: '/api/files' });
+    await this.fastify.register(dataRoutes, { prefix: '/api/data' });
+    await this.fastify.register(generateRoutes, { prefix: '/api/generate' });
+    await this.fastify.register(nistRoutes, { prefix: '/api/nist' });
   }
 
   async start(): Promise<number> {

@@ -23,7 +23,7 @@ export interface BatchValidationResultDto {
 }
 
 export interface PufCommandOptionsDto {
-  command: 'metrics' | 'genstable' | 'extract' | 'binary' | 'hex';
+  command: 'metrics' | 'genstable' | 'extract' | 'binary' | 'hex' | 'image' | 'augment' | 'corrupt' | 'fixlf' | 'nistavg' | 'random' | 'repeated';
   findComma: boolean;
   startIndicator: string;
   initValue: string;

@@ -8,13 +8,15 @@ import {
   Group, 
   Progress, 
   Stack,
-  Button 
+  Button,
+  Badge
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { 
   CpuChipIcon, 
   DocumentIcon,
-  TrashIcon
+  TrashIcon,
+  BeakerIcon
 } from '@heroicons/react/24/outline';
 
 const StatCard: React.FC<{ 
@@ -42,6 +44,8 @@ const StatCard: React.FC<{
 export const Dashboard: React.FC = () => {
   const [deviceCount, setDeviceCount] = useState<number>(0);
   const [readingCount, setReadingCount] = useState<number>(0);
+  const [analysisCount, setAnalysisCount] = useState<number>(0);
+  const [recentAnalyses, setRecentAnalyses] = useState<any[]>([]);
   const [dbStatus, setDbStatus] = useState<'online' | 'offline' | 'loading'>('loading');
 
   const loadDashboardData = async () => {
@@ -51,6 +55,17 @@ export const Dashboard: React.FC = () => {
       const totalReadings = await window.electron.database.getReadingCount();
       setDeviceCount(devices.length);
       setReadingCount(totalReadings);
+      
+      try {
+        const aCount = await window.electron.analysis.getCount();
+        setAnalysisCount(aCount);
+        const recent = await window.electron.analysis.getRecent(5);
+        setRecentAnalyses(recent);
+      } catch {
+        setAnalysisCount(0);
+        setRecentAnalyses([]);
+      }
+      
       setDbStatus('online');
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
@@ -95,7 +110,7 @@ export const Dashboard: React.FC = () => {
         </div>
         
         <Grid>
-          <Grid.Col span={{ base: 12, md: 6 }}>
+          <Grid.Col span={{ base: 12, md: 4 }}>
             <StatCard
               title="Total Devices"
               value={deviceCount.toString()}
@@ -103,16 +118,24 @@ export const Dashboard: React.FC = () => {
             />
           </Grid.Col>
           
-          <Grid.Col span={{ base: 12, md: 6 }}>
+          <Grid.Col span={{ base: 12, md: 4 }}>
             <StatCard
               title="PUF Readings"
               value={readingCount.toLocaleString()}
               icon={DocumentIcon}
             />
           </Grid.Col>
+
+          <Grid.Col span={{ base: 12, md: 4 }}>
+            <StatCard
+              title="Analyses Run"
+              value={analysisCount.toLocaleString()}
+              icon={BeakerIcon}
+            />
+          </Grid.Col>
         </Grid>
         
-        {/* Recent Activity - Commented out for now
+        {recentAnalyses.length > 0 && (
         <Grid>
           <Grid.Col span={{ base: 12, lg: 8 }}>
             <Card shadow="sm" padding="lg" radius="md" withBorder>
@@ -122,23 +145,26 @@ export const Dashboard: React.FC = () => {
                 </Text>
               </Group>
               <Stack gap="sm">
-                <Group justify="space-between">
-                  <Text size="sm">Device "Arduino Uno #1" analyzed</Text>
-                  <Text size="xs" c="dimmed">2 minutes ago</Text>
-                </Group>
-                <Group justify="space-between">
-                  <Text size="sm">New PUF data uploaded</Text>
-                  <Text size="xs" c="dimmed">5 minutes ago</Text>
-                </Group>
-                <Group justify="space-between">
-                  <Text size="sm">Analysis completed for Device #5</Text>
-                  <Text size="xs" c="dimmed">10 minutes ago</Text>
-                </Group>
+                {recentAnalyses.map((a: any, i: number) => (
+                  <Group key={i} justify="space-between">
+                    <Group gap="xs">
+                      <Badge size="sm" variant="light">
+                        {a.analysis_type}
+                      </Badge>
+                      <Text size="sm">
+                        {a.device_name ? `Device "${a.device_name}"` : 'Manual analysis'}
+                      </Text>
+                    </Group>
+                    <Text size="xs" c="dimmed">
+                      {new Date(a.created_at).toLocaleString()}
+                    </Text>
+                  </Group>
+                ))}
               </Stack>
             </Card>
           </Grid.Col>
         </Grid>
-        */}
+        )}
           
         <Grid>
           <Grid.Col span={{ base: 12, lg: 4 }}>

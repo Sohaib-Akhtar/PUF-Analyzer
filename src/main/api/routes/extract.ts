@@ -81,7 +81,7 @@ export async function extractRoutes(fastify: FastifyInstance) {
           type: 'object',
           properties: {
             success: { type: 'boolean' },
-            data: { type: 'object' },
+            data: { type: 'object', additionalProperties: true },
             timestamp: { type: 'string' }
           }
         }

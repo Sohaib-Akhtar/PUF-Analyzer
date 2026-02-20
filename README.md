@@ -1,171 +1,297 @@
 # PUF Analyzer Desktop
 
-A modern Electron desktop application for PUF (Physically Unclonable Function) analysis.
+A modern Electron desktop application for PUF (Physically Unclonable Function) analysis. It wraps the [dram-puf-cli](../dram-puf-cli) Java tool with a rich GUI, local SQLite database, and an embedded Fastify REST API running fully offline.
 
-![alt text](6C0B30F3-C937-4EA2-971D-1BEBF74820EA_1_201_a.jpeg)
+![screenshot](6C0B30F3-C937-4EA2-971D-1BEBF74820EA_1_201_a.jpeg)
 
 ## Tech Stack
 
-- **Frontend**: React 18+, TypeScript, Tailwind CSS, Mantine UI, heroicons
-- **Backend**: Electron, Node.js, SQLite (better-sqlite3), Fastify REST API
-- **PUF Analysis**: Java CLI bridge for dram-puf-cli operations
-- **Build Tools**: Vite, electron-vite, electron-builder
-- **Development Tools**: ESLint, Prettier
+- **Frontend**: React 19, TypeScript, Tailwind CSS 4, Mantine 8, Heroicons
+- **Backend**: Electron 37, Node.js, SQLite (better-sqlite3), Fastify 5
+- **PUF Analysis**: Java CLI bridge (`dram-puf-cli`) via `child_process`
+- **Build Tools**: Vite 7, electron-vite 4, electron-builder
+- **Code Quality**: ESLint 9, Prettier
+
+---
 
 ## Prerequisites
 
-- **Node.js**: v18+ (tested with v20.18.3)
-- **pnpm**: v8+ (tested with v8.9.0) 
-- **Java**: OpenJDK 11+ (required for PUF analysis)
-- **Maven**: v3.8+ (tested with v3.9.9)
+| Tool | Minimum Version | Recommended | Notes |
+|------|----------------|-------------|-------|
+| **Node.js** | 18 | 20 LTS+ | [Download](https://nodejs.org/) |
+| **npm** | 9 | _(ships with Node)_ | Used as the package manager |
+| **Java (JDK)** | 11 | 21 LTS | Required for all PUF analysis operations |
+| **Maven** | 3.8 | 3.9+ | Required to build the Java CLI JAR |
 
-### Java Setup (Required for PUF Operations)
+### Installing Java
+
+<details>
+<summary><strong>Windows</strong></summary>
+
+1. Download and install [Eclipse Temurin JDK](https://adoptium.net/) (recommended) or Oracle JDK.
+2. During installation, check **"Set JAVA_HOME variable"** and **"Add to PATH"**.
+3. Verify in a new terminal:
+   ```powershell
+   java -version
+   javac -version
+   ```
+</details>
+
+<details>
+<summary><strong>macOS</strong></summary>
+
 ```bash
-# Install Java 11 via Homebrew (macOS)
-brew install openjdk@11
+# Using Homebrew
+brew install openjdk@21
 
-# Set environment (add to ~/.zshrc or ~/.bashrc)
-export JAVA_HOME=/opt/homebrew/opt/openjdk@11
-export PATH="/opt/homebrew/opt/openjdk@11/bin:$PATH"
+# Link so the system can find it
+sudo ln -sfn $(brew --prefix openjdk@21)/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk-21.jdk
+
+# Add to your shell profile (~/.zshrc or ~/.bashrc)
+export JAVA_HOME=$(/usr/libexec/java_home -v 21)
+export PATH="$JAVA_HOME/bin:$PATH"
 ```
 
-## Installation
-
-1. Clone the repository:
+Verify:
 ```bash
-git clone
-cd puf-desktop-gui
+java -version
+```
+</details>
+
+<details>
+<summary><strong>Linux (Debian / Ubuntu)</strong></summary>
+
+```bash
+sudo apt update
+sudo apt install openjdk-21-jdk
+
+# Optional: set default if multiple versions installed
+sudo update-alternatives --config java
 ```
 
-2. Build Java CLI (required first):
+Verify:
 ```bash
-cd ../dram-puf-cli
+java -version
+```
+</details>
+
+### Installing Maven
+
+<details>
+<summary><strong>Windows</strong></summary>
+
+1. Download the **Binary zip archive** from [maven.apache.org](https://maven.apache.org/download.cgi).
+2. Extract to a directory (e.g. `C:\tools\apache-maven-3.9.9`).
+3. Add `C:\tools\apache-maven-3.9.9\bin` to your **PATH** environment variable.
+4. Verify:
+   ```powershell
+   mvn -version
+   ```
+
+Alternatively, install via [Chocolatey](https://chocolatey.org/):
+```powershell
+choco install maven
+```
+</details>
+
+<details>
+<summary><strong>macOS</strong></summary>
+
+```bash
+brew install maven
+mvn -version
+```
+</details>
+
+<details>
+<summary><strong>Linux (Debian / Ubuntu)</strong></summary>
+
+```bash
+sudo apt install maven
+mvn -version
+```
+</details>
+
+---
+
+## Quick Start
+
+> Both repositories (`dram-puf-cli` and `puf-desktop-gui`) must sit side-by-side in the same parent directory.
+
+```
+parent-directory/
+├── dram-puf-cli/       # Java CLI tool
+└── puf-desktop-gui/    # This project (Electron app)
+```
+
+### 1. Clone both repositories
+
+```bash
+git clone <dram-puf-cli-repo-url>
+git clone <puf-desktop-gui-repo-url>
+```
+
+### 2. Build the Java CLI JAR
+
+```bash
+cd dram-puf-cli
 mvn clean package
 ```
 
-3. Install Node.js dependencies:
+This produces `target/pufmetrics-1.0-SNAPSHOT.jar` which the Electron app references at runtime.
+
+### 3. Install Node.js dependencies
+
 ```bash
-cd ../puf-desktop-gui  
-pnpm install
+cd ../puf-desktop-gui
+npm install
 ```
 
-4. Build Electron app:
-```bash
-pnpm build
-```
-
-## Development
-
-Start the development server:
+### 4. Start the app in development mode
 
 ```bash
-pnpm dev
+npm run dev
 ```
 
 This will:
-- Start the Electron main process
-- Launch the React development server
-- Enable hot reload for both processes
-- Open the application window
+- Build the Electron main process, preload scripts, and React renderer
+- Launch the application window with hot reload enabled
+- Start the embedded Fastify REST API on a random local port
 
-## Build
+---
 
-### Build for Development
-```bash
-pnpm build
-```
+## Scripts
 
-### Package for Distribution
-```bash
-pnpm package
-```
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start the app in development mode with hot reload |
+| `npm run build` | Compile all bundles (main, preload, renderer) to `out/` |
+| `npm run package` | Package for distribution via electron-builder (output in `dist-electron/`) |
+| `npm run lint` | Run ESLint across the project |
+| `npm run lint:fix` | Auto-fix lint issues |
+| `npm run format` | Format code with Prettier |
+| `npm run format:check` | Check code formatting without writing |
+| `npm run type-check` | Run TypeScript type checking (all projects) |
 
-This will create distributable packages in the `dist-electron` directory.
+---
 
 ## PUF Backend API
 
-Local REST server for PUF analysis operations. Auto-starts with app, fully offline.
+A local Fastify REST server starts automatically with the app. All operations run offline — no external network calls are made.
 
 ### Endpoints
-- POST /api/metrics/analyze - Run PUF metrics analysis  
-- POST /api/stable/generate - Generate stable positions
-- POST /api/extract/key - Extract keys from dumps
-- POST /api/convert/binary - Convert binary data formats
-- POST /api/files/upload - Upload and validate files
-- GET /docs - Swagger documentation UI
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/metrics/analyze` | Run PUF quality metrics (uniqueness, reliability, etc.) |
+| POST | `/api/stable/generate` | Generate stable bit positions |
+| POST | `/api/extract/key` | Extract keys from binary dumps |
+| POST | `/api/convert/binary` | Convert to binary format |
+| POST | `/api/convert/hex` | Convert to hex format |
+| POST | `/api/convert/image` | Convert to image format |
+| POST | `/api/convert/augment` | Augment data with noise |
+| POST | `/api/convert/corrupt` | Corrupt data for testing |
+| POST | `/api/convert/fixlf` | Fix line-feed formatting |
+| POST | `/api/metrics/nist-average` | Average NIST randomness test results |
+| POST | `/api/stable/random` | Generate random test data |
+| POST | `/api/stable/repeated` | Generate repeated-pattern test data |
+| POST | `/api/files/upload` | Upload and validate PUF reading files |
+| GET | `/docs` | Interactive Swagger API documentation |
 
 ### File Format
-Binary strings (0/1), 32 chars/line, .txt/.bin/.pos extensions
-Examples: tiva_original_26181245.txt, stellaris1_26183504.txt
 
-### Usage  
-Backend auto-starts with app at localhost:PORT
-Access docs at /docs endpoint for API testing
-Java CLI operations bridged via child_process execution
+PUF reading files are binary strings consisting of `0` and `1` characters, typically 32 characters per line, with `.txt`, `.bin`, or `.pos` extensions.
 
-## Preliminary Project Structure
+Example filenames: `tiva_original_26181245.txt`, `stellaris1_26183504.txt`
+
+---
+
+## Project Structure
 
 ```
 src/
-├── main/                 # Main process code
-│   ├── index.ts         # Main process entry point
-│   ├── ipc/             # IPC handlers
-│   └── api/             # REST API server
-│       ├── server.ts    # Fastify server setup
-│       ├── routes/      # API endpoints
-│       ├── services/    # Java CLI bridge & file validation
-│       ├── dto/         # Request/response types
-│       └── middleware/  # Validation & error handling
-├── renderer/            # Renderer process code
-│   ├── components/      # Reusable UI components
-│   ├── pages/          # Page components
-│   ├── providers/      # Context providers
-│   ├── types/          # TypeScript type definitions
-│   ├── styles/         # Global styles
-│   └── theme/          # Mantine theme configuration
-├── preload/            # Preload scripts
-├── database/           # Database related code
-│   ├── connection.ts   # Database connection
-│   ├── schema.sql      # Database schema
-│   └── services/       # Database services
-└── shared/             # Shared utilities and types
+├── main/                 # Electron main process
+│   ├── index.ts          # Entry point, window creation
+│   ├── ipc/              # IPC handler registration
+│   └── api/              # Embedded REST API
+│       ├── server.ts     # Fastify server setup
+│       ├── routes/       # Route handlers (metrics, convert, extract, etc.)
+│       ├── services/     # Java CLI bridge & file validation
+│       ├── dto/          # Request/response type definitions
+│       └── middleware/   # Validation & error handling
+├── renderer/             # React frontend (renderer process)
+│   ├── components/       # Reusable UI components (Navbar, Header, Footer, modals)
+│   ├── pages/            # Page components (Dashboard, Devices, Analysis)
+│   ├── providers/        # React context providers (theme)
+│   ├── types/            # TypeScript declarations
+│   ├── styles/           # Global CSS / Tailwind
+│   └── theme/            # Mantine theme configuration
+├── preload/              # Preload scripts (contextBridge API)
+├── database/             # SQLite database layer
+│   ├── connection.ts     # Database connection & initialization
+│   ├── schema.sql        # Table definitions
+│   └── services/         # Data access services (devices, readings, files)
+└── shared/               # Shared types between processes
 ```
+
+---
 
 ## Database
 
-SQLite schema includes:
+SQLite is used for local storage — no external database required. The database file is created automatically on first launch.
 
-- **Devices**: PUF device information
-- **PUF Readings**: Binary file metadata linked to devices  
-- **PUF Analysis Results**: Analysis operation results & parameters
-- **PUF Analysis Files**: File references for each analysis
+| Table | Description |
+|-------|-------------|
+| `devices` | PUF device metadata (name, type, reading count) |
+| `puf_readings` | Binary reading data linked to devices |
+| `puf_analysis_results` | Stored analysis results and parameters |
+| `puf_analysis_files` | File references for each analysis run |
 
-## Navigation
+---
 
-The application includes a sidebar navigation with the following sections:
+## Application Pages
 
-- **Dashboard**: Overview
-- **Devices**: Manage PUF devices
+| Page | Description |
+|------|-------------|
+| **Dashboard** | Overview with quick stats and recent activity |
+| **Devices** | Register PUF devices, upload readings, manage data |
+| **Analysis** | 12-tab interface for all PUF operations (metrics, key extraction, format conversion, NIST tests, etc.) |
+
+---
 
 ## Troubleshooting
 
-### Version Issues
-- **Java errors**: Ensure Java 11+ is installed and JAVA_HOME is set
-- **Maven build fails**: Check `java -version` shows Java 11
-- **Node.js errors**: Upgrade to Node.js v18+ 
-- **Package conflicts**: Use `pnpm` (not npm/yarn) for consistency
+### Java / Maven
 
-### Build Issues  
-- **JAR not found**: Run `mvn clean package` in dram-puf-cli first
-- **Main process errors**: Run `pnpm build` after code changes
-- **API server fails**: Verify Java CLI builds successfully
+| Problem | Solution |
+|---------|----------|
+| `java` not found | Install a JDK (see [Installing Java](#installing-java)) and ensure it's on your PATH |
+| `JAVA_HOME` not set | Set it to your JDK installation directory (not the `bin/` folder) |
+| `mvn` not found | Install Maven (see [Installing Maven](#installing-maven)) and ensure it's on your PATH |
+| Maven build fails | Run `java -version` to confirm JDK 11+ is active; also check you're in `dram-puf-cli/` |
 
-### Runtime Issues
-- **API endpoints 404**: Check console for server startup port
+### Node.js / Build
+
+| Problem | Solution |
+|---------|----------|
+| `npm install` fails | Ensure Node.js 18+ is installed: `node -v` |
+| `native module` errors | Run `npm run postinstall` to rebuild native deps (better-sqlite3) for Electron |
+| Build fails after code changes | Run `npm run build` to recompile all bundles |
+| JAR not found at runtime | Make sure `dram-puf-cli/target/pufmetrics-1.0-SNAPSHOT.jar` exists (run Maven build) |
+
+### Runtime
+
+| Problem | Solution |
+|---------|----------|
+| API endpoints return 404 | Check the dev console for the server port — it changes each launch |
+| Analysis operations error | Ensure the Java CLI JAR was built and `java` is on the PATH |
+| Database errors | Delete the database file and restart the app to reinitialize |
+
+---
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
 
 ## Support
 

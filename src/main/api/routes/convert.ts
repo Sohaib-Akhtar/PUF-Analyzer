@@ -1,8 +1,8 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { JavaCliService } from '../services/javaCliService';
 import { FileService } from '../services/fileService';
-import { ConvertRequestDto } from '../dto/requests';
-import { ApiResponseDto, ConversionResultDto } from '../dto/responses';
+import { ConvertRequestDto, HexConvertRequestDto, ImageConvertRequestDto } from '../dto/requests';
+import { ApiResponseDto, ConversionResultDto, HexConversionResultDto, ImageConversionResultDto } from '../dto/responses';
 
 interface ConvertRouteBody {
   files?: Array<{
@@ -14,6 +14,30 @@ interface ConvertRouteBody {
   from: 'bin' | 'txt';
   binWidth?: number;
   line?: boolean;
+  findComma?: boolean;
+}
+
+interface HexRouteBody {
+  files?: Array<{
+    name: string;
+    data: string;
+    size: number;
+  }>;
+  input?: string;
+  from: 'hex' | 'txt';
+  line?: boolean;
+  findComma?: boolean;
+}
+
+interface ImageRouteBody {
+  files: Array<{
+    name: string;
+    data: string;
+    size: number;
+  }>;
+  from: 'bin' | 'img';
+  imageWidth?: number;
+  imageHeight?: number;
   findComma?: boolean;
 }
 
@@ -84,7 +108,7 @@ export async function convertRoutes(fastify: FastifyInstance) {
           type: 'object',
           properties: {
             success: { type: 'boolean' },
-            data: { type: 'object' },
+            data: { type: 'object', additionalProperties: true },
             timestamp: { type: 'string' }
           }
         }
@@ -178,31 +202,183 @@ export async function convertRoutes(fastify: FastifyInstance) {
     }
   });
 
-  fastify.post<{ Body: ConvertRouteBody }>('/hex', {
+  fastify.post<{ Body: HexRouteBody }>('/hex', {
     schema: {
-      summary: 'Convert hexadecimal data (Not Implemented)',
-      description: 'Hex conversion functionality is not yet implemented',
-      response: {
-        501: {
-          type: 'object',
-          properties: {
-            success: { type: 'boolean' },
-            error: { type: 'string' },
-            timestamp: { type: 'string' }
-          }
-        }
+      summary: 'Convert hexadecimal data between formats',
+      description: 'Converts data between hex and txt formats using the Java CLI',
+      body: {
+        type: 'object',
+        properties: {
+          files: {
+            type: 'array',
+            description: 'Array of files to convert',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string', description: 'Filename' },
+                data: { type: 'string', description: 'Base64 encoded file content' },
+                size: { type: 'number', description: 'File size in bytes' }
+              },
+              required: ['name', 'data', 'size']
+            }
+          },
+          input: { type: 'string', description: 'Input string for line mode' },
+          from: { type: 'string', enum: ['hex', 'txt'], description: 'Source format' },
+          line: { type: 'boolean', description: 'Use line mode with input string', default: false },
+          findComma: { type: 'boolean', description: 'Find comma delimiter in data', default: false }
+        },
+        required: ['from']
       }
     }
-  }, async (_, reply: FastifyReply) => {
+  }, async (request: FastifyRequest<{ Body: HexRouteBody }>, reply: FastifyReply) => {
     try {
-      return reply.status(501).send({
-        success: false,
-        error: 'Hex conversion not yet implemented',
+      const { files: rawFiles, input, from, line = false, findComma = false } = request.body;
+
+      if (!from || !['hex', 'txt'].includes(from)) {
+        return reply.status(400).send({
+          success: false,
+          error: 'Parameter "from" must be either "hex" or "txt"',
+          timestamp: new Date().toISOString()
+        } as ApiResponseDto);
+      }
+
+      if (line && !input) {
+        return reply.status(400).send({
+          success: false,
+          error: 'Input string required when using line mode',
+          timestamp: new Date().toISOString()
+        } as ApiResponseDto);
+      }
+
+      if (!line && (!rawFiles || rawFiles.length === 0)) {
+        return reply.status(400).send({
+          success: false,
+          error: 'Files required when not using line mode',
+          timestamp: new Date().toISOString()
+        } as ApiResponseDto);
+      }
+
+      let files: Array<{ name: string; data: Buffer; size: number }> | undefined;
+
+      if (!line && rawFiles) {
+        files = rawFiles.map(f => ({
+          name: f.name,
+          data: Buffer.from(f.data, 'base64'),
+          size: f.size
+        }));
+
+        const validationResult = fileService.validateBatch(files);
+        if (!validationResult.allValid) {
+          return reply.status(400).send({
+            success: false,
+            error: 'File validation failed',
+            data: {
+              validationErrors: validationResult.results.filter(r => !r.isValid),
+              globalErrors: validationResult.globalErrors
+            },
+            timestamp: new Date().toISOString()
+          } as ApiResponseDto);
+        }
+      }
+
+      const hexRequest: HexConvertRequestDto = {
+        files: files || undefined,
+        input,
+        from,
+        line,
+        findComma
+      };
+
+      const result = await javaCliService.convertHex(hexRequest);
+
+      return reply.status(200).send({
+        success: true,
+        data: result,
         timestamp: new Date().toISOString()
-      } as ApiResponseDto);
+      } as ApiResponseDto<HexConversionResultDto>);
+
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      
+      return reply.status(500).send({
+        success: false,
+        error: errorMessage,
+        timestamp: new Date().toISOString()
+      } as ApiResponseDto);
+    }
+  });
+
+  fastify.post<{ Body: ImageRouteBody }>('/image', {
+    schema: {
+      summary: 'Convert between binary dumps and PNG images',
+      description: 'Converts binary data to/from PNG images using the Java CLI',
+      body: {
+        type: 'object',
+        properties: {
+          files: {
+            type: 'array',
+            description: 'Array of files to convert',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string', description: 'Filename' },
+                data: { type: 'string', description: 'Base64 encoded file content' },
+                size: { type: 'number', description: 'File size in bytes' }
+              },
+              required: ['name', 'data', 'size']
+            }
+          },
+          from: { type: 'string', enum: ['bin', 'img'], description: 'Source format' },
+          imageWidth: { type: 'number', description: 'Image width in pixels', default: 32 },
+          imageHeight: { type: 'number', description: 'Image height (0 = auto)', default: 0 },
+          findComma: { type: 'boolean', description: 'Find comma delimiter in data', default: false }
+        },
+        required: ['files', 'from']
+      }
+    }
+  }, async (request: FastifyRequest<{ Body: ImageRouteBody }>, reply: FastifyReply) => {
+    try {
+      const { files: rawFiles, from, imageWidth, imageHeight, findComma = false } = request.body;
+
+      if (!rawFiles || rawFiles.length === 0) {
+        return reply.status(400).send({
+          success: false,
+          error: 'No files provided',
+          timestamp: new Date().toISOString()
+        } as ApiResponseDto);
+      }
+
+      if (!from || !['bin', 'img'].includes(from)) {
+        return reply.status(400).send({
+          success: false,
+          error: 'Parameter "from" must be either "bin" or "img"',
+          timestamp: new Date().toISOString()
+        } as ApiResponseDto);
+      }
+
+      const files = rawFiles.map(f => ({
+        name: f.name,
+        data: Buffer.from(f.data, 'base64'),
+        size: f.size
+      }));
+
+      const imageRequest: ImageConvertRequestDto = {
+        files,
+        from,
+        imageWidth,
+        imageHeight,
+        findComma
+      };
+
+      const result = await javaCliService.convertImage(imageRequest);
+
+      return reply.status(200).send({
+        success: true,
+        data: result,
+        timestamp: new Date().toISOString()
+      } as ApiResponseDto<ImageConversionResultDto>);
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       return reply.status(500).send({
         success: false,
         error: errorMessage,

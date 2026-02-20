@@ -4,19 +4,24 @@ import { getDatabase, resetDatabase } from '../../database/connection';
 import { DeviceService } from '../../database/services/deviceService';
 import { PufReadingService } from '../../database/services/pufReadingService';
 import { FileUploadService } from '../../database/services/fileUploadService';
-import { CreateDeviceDto } from '../../shared/types/database';
+import { AnalysisService } from '../../database/services/analysisService';
+import { JavaCliService } from '../api/services/javaCliService';
+import { CreateDeviceDto, CreatePufAnalysisDto } from '../../shared/types/database';
 
 export const setupIpcHandlers = (): void => {
   let db: any = null;
   let deviceService: DeviceService | null = null;
   let pufReadingService: PufReadingService | null = null;
   let fileUploadService: FileUploadService | null = null;
+  let analysisService: AnalysisService | null = null;
+  const javaCliService = new JavaCliService();
   
   try {
     db = getDatabase();
     deviceService = new DeviceService(db);
     pufReadingService = new PufReadingService(db);
     fileUploadService = new FileUploadService(db);
+    analysisService = new AnalysisService(db);
   } catch (error) {
     console.warn('Database not available for IPC handlers');
   }
@@ -169,6 +174,7 @@ export const setupIpcHandlers = (): void => {
       deviceService = new DeviceService(db);
       pufReadingService = new PufReadingService(db);
       fileUploadService = new FileUploadService(db);
+      analysisService = new AnalysisService(db);
       
       return { success: true, message: 'Database reset successfully' };
     } catch (error) {
@@ -276,6 +282,293 @@ export const setupIpcHandlers = (): void => {
       return true;
     } catch (error) {
       throw new Error(`Failed to write file: ${error}`);
+    }
+  });
+
+  // ──────────────────────────────────────────────
+  // Analysis operations (bridge to Java CLI)
+  // ──────────────────────────────────────────────
+
+  const buildFileDto = (filePaths: string[], fileContents: Buffer[]) =>
+    filePaths.map((fp, i) => ({
+      name: fp.split(/[\\/]/).pop()!,
+      data: fileContents[i],
+      size: fileContents[i].length
+    }));
+
+  ipcMain.handle('analysis:run-metrics', async (_, params: {
+    files: Array<{ name: string; data: string; size: number }>;
+    onlyTotal?: boolean;
+    findComma?: boolean;
+    startIndicator?: string;
+    initValue?: string;
+    jobs?: number;
+  }) => {
+    try {
+      const files = params.files.map(f => ({
+        name: f.name,
+        data: Buffer.from(f.data, 'base64'),
+        size: f.size
+      }));
+      return await javaCliService.executeMetrics({ files, ...params });
+    } catch (error) {
+      throw new Error(`Failed to run metrics: ${error}`);
+    }
+  });
+
+  ipcMain.handle('analysis:generate-stable', async (_, params: {
+    files: Array<{ name: string; data: string; size: number }>;
+    keyLength: number;
+    findComma?: boolean;
+  }) => {
+    try {
+      const files = params.files.map(f => ({
+        name: f.name,
+        data: Buffer.from(f.data, 'base64'),
+        size: f.size
+      }));
+      return await javaCliService.generateStable({ files, keyLength: params.keyLength, findComma: params.findComma });
+    } catch (error) {
+      throw new Error(`Failed to generate stable positions: ${error}`);
+    }
+  });
+
+  ipcMain.handle('analysis:extract-key', async (_, params: {
+    binFile: { name: string; data: string; size: number };
+    stableFile: { name: string; data: string; size: number };
+    findComma?: boolean;
+  }) => {
+    try {
+      const binFile = { name: params.binFile.name, data: Buffer.from(params.binFile.data, 'base64'), size: params.binFile.size };
+      const stableFile = { name: params.stableFile.name, data: Buffer.from(params.stableFile.data, 'base64'), size: params.stableFile.size };
+      return await javaCliService.extractKey({ binFile, stableFile, findComma: params.findComma });
+    } catch (error) {
+      throw new Error(`Failed to extract key: ${error}`);
+    }
+  });
+
+  ipcMain.handle('analysis:convert-binary', async (_, params: {
+    files?: Array<{ name: string; data: string; size: number }>;
+    input?: string;
+    from: 'bin' | 'txt';
+    binWidth?: number;
+    line?: boolean;
+    findComma?: boolean;
+  }) => {
+    try {
+      const files = params.files?.map(f => ({
+        name: f.name,
+        data: Buffer.from(f.data, 'base64'),
+        size: f.size
+      }));
+      return await javaCliService.convertBinary({ ...params, files });
+    } catch (error) {
+      throw new Error(`Failed to convert binary: ${error}`);
+    }
+  });
+
+  ipcMain.handle('analysis:convert-hex', async (_, params: {
+    files?: Array<{ name: string; data: string; size: number }>;
+    input?: string;
+    from: 'hex' | 'txt';
+    line?: boolean;
+    findComma?: boolean;
+  }) => {
+    try {
+      const files = params.files?.map(f => ({
+        name: f.name,
+        data: Buffer.from(f.data, 'base64'),
+        size: f.size
+      }));
+      return await javaCliService.convertHex({ ...params, files });
+    } catch (error) {
+      throw new Error(`Failed to convert hex: ${error}`);
+    }
+  });
+
+  ipcMain.handle('analysis:convert-image', async (_, params: {
+    files: Array<{ name: string; data: string; size: number }>;
+    from: 'bin' | 'img';
+    imageWidth?: number;
+    imageHeight?: number;
+    findComma?: boolean;
+  }) => {
+    try {
+      const files = params.files.map(f => ({
+        name: f.name,
+        data: Buffer.from(f.data, 'base64'),
+        size: f.size
+      }));
+      return await javaCliService.convertImage({ files, from: params.from, imageWidth: params.imageWidth, imageHeight: params.imageHeight, findComma: params.findComma });
+    } catch (error) {
+      throw new Error(`Failed to convert image: ${error}`);
+    }
+  });
+
+  ipcMain.handle('analysis:augment-data', async (_, params: {
+    files: Array<{ name: string; data: string; size: number }>;
+    flipChance0?: number;
+    flipChance1?: number;
+    augmentFactor?: number;
+    bits?: number;
+    regenOriginal?: boolean;
+    deleteOriginal?: boolean;
+    suffix?: string;
+    findComma?: boolean;
+  }) => {
+    try {
+      const files = params.files.map(f => ({
+        name: f.name,
+        data: Buffer.from(f.data, 'base64'),
+        size: f.size
+      }));
+      return await javaCliService.augmentData({ files, ...params });
+    } catch (error) {
+      throw new Error(`Failed to augment data: ${error}`);
+    }
+  });
+
+  ipcMain.handle('analysis:corrupt-data', async (_, params: {
+    files: Array<{ name: string; data: string; size: number }>;
+    corruptPercentage?: number;
+    bits?: number;
+    regenOriginal?: boolean;
+    deleteOriginal?: boolean;
+    findComma?: boolean;
+  }) => {
+    try {
+      const files = params.files.map(f => ({
+        name: f.name,
+        data: Buffer.from(f.data, 'base64'),
+        size: f.size
+      }));
+      return await javaCliService.corruptData({ files, ...params });
+    } catch (error) {
+      throw new Error(`Failed to corrupt data: ${error}`);
+    }
+  });
+
+  ipcMain.handle('analysis:fix-line-feeds', async (_, params: {
+    files: Array<{ name: string; data: string; size: number }>;
+    outSuffix?: string;
+  }) => {
+    try {
+      const files = params.files.map(f => ({
+        name: f.name,
+        data: Buffer.from(f.data, 'base64'),
+        size: f.size
+      }));
+      return await javaCliService.fixLineFeeds({ files, outSuffix: params.outSuffix });
+    } catch (error) {
+      throw new Error(`Failed to fix line feeds: ${error}`);
+    }
+  });
+
+  ipcMain.handle('analysis:nist-average', async (_, params: {
+    files: Array<{ name: string; data: string; size: number }>;
+    outFile?: string;
+  }) => {
+    try {
+      const files = params.files.map(f => ({
+        name: f.name,
+        data: Buffer.from(f.data, 'base64'),
+        size: f.size
+      }));
+      return await javaCliService.nistAverage({ files, outFile: params.outFile });
+    } catch (error) {
+      throw new Error(`Failed to compute NIST average: ${error}`);
+    }
+  });
+
+  ipcMain.handle('analysis:generate-random', async (_, params: {
+    filenames?: string[];
+    hammingWeightMultiplier?: number;
+    hammingWeight?: number;
+    bits?: number;
+  }) => {
+    try {
+      return await javaCliService.generateRandom(params);
+    } catch (error) {
+      throw new Error(`Failed to generate random data: ${error}`);
+    }
+  });
+
+  ipcMain.handle('analysis:generate-repeated', async (_, params: {
+    filename?: string;
+    bits?: number;
+    data?: string;
+  }) => {
+    try {
+      return await javaCliService.generateRepeated(params);
+    } catch (error) {
+      throw new Error(`Failed to generate repeated data: ${error}`);
+    }
+  });
+
+  // ──────────────────────────────────────────────
+  // Analysis persistence operations
+  // ──────────────────────────────────────────────
+
+  ipcMain.handle('analysis:save-result', async (_, data: CreatePufAnalysisDto) => {
+    if (!analysisService) throw new Error('Database not available');
+    try {
+      return analysisService.createAnalysis(data);
+    } catch (error) {
+      throw new Error(`Failed to save analysis result: ${error}`);
+    }
+  });
+
+  ipcMain.handle('analysis:get-result', async (_, id: number) => {
+    if (!analysisService) throw new Error('Database not available');
+    try {
+      return analysisService.getAnalysisWithFiles(id);
+    } catch (error) {
+      throw new Error(`Failed to get analysis result: ${error}`);
+    }
+  });
+
+  ipcMain.handle('analysis:get-device-history', async (_, deviceId: number) => {
+    if (!analysisService) throw new Error('Database not available');
+    try {
+      return analysisService.getDeviceAnalysisHistory(deviceId);
+    } catch (error) {
+      throw new Error(`Failed to get device analysis history: ${error}`);
+    }
+  });
+
+  ipcMain.handle('analysis:get-recent', async (_, limit: number = 10) => {
+    if (!analysisService) throw new Error('Database not available');
+    try {
+      return analysisService.getRecentAnalyses(limit);
+    } catch (error) {
+      throw new Error(`Failed to get recent analyses: ${error}`);
+    }
+  });
+
+  ipcMain.handle('analysis:get-count', async () => {
+    if (!analysisService) throw new Error('Database not available');
+    try {
+      return analysisService.getAnalysisCount();
+    } catch (error) {
+      throw new Error(`Failed to get analysis count: ${error}`);
+    }
+  });
+
+  ipcMain.handle('analysis:delete-result', async (_, id: number) => {
+    if (!analysisService) throw new Error('Database not available');
+    try {
+      return analysisService.deleteAnalysis(id);
+    } catch (error) {
+      throw new Error(`Failed to delete analysis result: ${error}`);
+    }
+  });
+
+  ipcMain.handle('analysis:search', async (_, searchTerm: string) => {
+    if (!analysisService) throw new Error('Database not available');
+    try {
+      return analysisService.searchAnalyses(searchTerm);
+    } catch (error) {
+      throw new Error(`Failed to search analyses: ${error}`);
     }
   });
 };
