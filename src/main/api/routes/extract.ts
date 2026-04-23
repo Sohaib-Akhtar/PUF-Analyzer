@@ -15,7 +15,6 @@ interface ExtractRouteBody {
     data: string;
     size: number;
   };
-  findComma?: boolean;
 }
 
 export async function extractRoutes(fastify: FastifyInstance) {
@@ -68,11 +67,6 @@ export async function extractRoutes(fastify: FastifyInstance) {
             },
             required: ['name', 'data', 'size']
           },
-          findComma: { 
-            type: 'boolean', 
-            description: 'Find comma delimiter in data',
-            default: false
-          }
         },
         required: ['binFile', 'stableFile']
       },
@@ -89,7 +83,7 @@ export async function extractRoutes(fastify: FastifyInstance) {
     }
   }, async (request: FastifyRequest<{ Body: ExtractRouteBody }>, reply: FastifyReply) => {
     try {
-      const { binFile: rawBinFile, stableFile: rawStableFile, findComma = false } = request.body;
+      const { binFile: rawBinFile, stableFile: rawStableFile } = request.body;
 
       if (!rawBinFile || !rawStableFile) {
         return reply.status(400).send({
@@ -138,8 +132,7 @@ export async function extractRoutes(fastify: FastifyInstance) {
 
       const extractRequest: ExtractRequestDto = {
         binFile,
-        stableFile,
-        findComma
+        stableFile
       };
 
       const result = await javaCliService.extractKey(extractRequest);

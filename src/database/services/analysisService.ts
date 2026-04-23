@@ -7,6 +7,19 @@ import {
   AnalysisWithFiles
 } from '../../shared/types/database';
 
+export interface AnalysisHistoryRow {
+  id: number;
+  device_id: number | null;
+  device_name: string | null;
+  analysis_type: string;
+  parameters: string;
+  result_data: string;
+  execution_time: number;
+  files_used: string;
+  status: string;
+  created_at: string;
+}
+
 export class AnalysisService {
   private db: Database.Database;
 
@@ -113,6 +126,17 @@ export class AnalysisService {
       'SELECT * FROM puf_analysis_results ORDER BY created_at DESC LIMIT ?'
     );
     return stmt.all(limit) as PufAnalysisResult[];
+  }
+
+  getAnalysisHistory(limit: number = 100): AnalysisHistoryRow[] {
+    const stmt = this.db.prepare(`
+      SELECT ar.*, d.name as device_name
+      FROM puf_analysis_results ar
+      LEFT JOIN devices d ON ar.device_id = d.id
+      ORDER BY ar.created_at DESC
+      LIMIT ?
+    `);
+    return stmt.all(limit) as AnalysisHistoryRow[];
   }
 
   getRecentAnalyses(limit: number = 10): AnalysisWithFiles[] {

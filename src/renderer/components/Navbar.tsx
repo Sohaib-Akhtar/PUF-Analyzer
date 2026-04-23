@@ -4,13 +4,15 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   ChartBarIcon, 
   CpuChipIcon,
-  BeakerIcon
+  BeakerIcon,
+  ClockIcon
 } from '@heroicons/react/24/outline';
 
 const navigationItems = [
   { path: '/dashboard', label: 'Dashboard', icon: ChartBarIcon },
   { path: '/devices', label: 'Devices', icon: CpuChipIcon },
   { path: '/analysis', label: 'Analysis', icon: BeakerIcon },
+  { path: '/history', label: 'History', icon: ClockIcon },
 ];
 
 export const Navbar: React.FC = () => {

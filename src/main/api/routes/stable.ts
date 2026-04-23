@@ -11,7 +11,6 @@ interface StableRouteBody {
     size: number;
   }>;
   keyLength: number;
-  findComma?: boolean;
 }
 
 export async function stableRoutes(fastify: FastifyInstance) {
@@ -54,11 +53,6 @@ export async function stableRoutes(fastify: FastifyInstance) {
             minimum: 8,
             maximum: 1024,
             default: 128
-          },
-          findComma: { 
-            type: 'boolean', 
-            description: 'Find comma delimiter in data',
-            default: false
           }
         },
         required: ['files', 'keyLength']
@@ -66,7 +60,7 @@ export async function stableRoutes(fastify: FastifyInstance) {
     }
   }, async (request: FastifyRequest<{ Body: StableRouteBody }>, reply: FastifyReply) => {
     try {
-      const { files: rawFiles, keyLength, findComma = false } = request.body;
+      const { files: rawFiles, keyLength } = request.body;
 
       if (!rawFiles || rawFiles.length === 0) {
         return reply.status(400).send({
@@ -114,8 +108,7 @@ export async function stableRoutes(fastify: FastifyInstance) {
 
       const stableRequest: StableRequestDto = {
         files,
-        keyLength,
-        findComma
+        keyLength
       };
 
       const result = await javaCliService.generateStable(stableRequest);

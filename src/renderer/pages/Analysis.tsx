@@ -39,7 +39,6 @@ import {
   ArrowDownTrayIcon,
   DocumentPlusIcon,
   XMarkIcon,
-  PhotoIcon,
   ExclamationTriangleIcon,
   CheckCircleIcon,
   ClockIcon,
@@ -118,11 +117,26 @@ const fileToBase64 = (file: File): Promise<string> =>
     reader.readAsDataURL(file);
   });
 
-const downloadBase64File = (filename: string, base64: string) => {
-  const link = document.createElement('a');
-  link.href = `data:application/octet-stream;base64,${base64}`;
-  link.download = filename;
-  link.click();
+const downloadBase64File = async (filename: string, base64: string) => {
+  try {
+    const filePath = await window.electron.filesystem.saveGeneratedFile(filename, base64);
+    if (filePath) {
+      showSuccess('Download Complete', `File saved to ${filePath}`);
+    }
+  } catch (error) {
+    showError('Download Failed', error);
+  }
+};
+
+const downloadAllGeneratedFiles = async (files: Array<{ filename: string; content: string }>) => {
+  try {
+    const saved = await window.electron.filesystem.saveGeneratedFiles(files);
+    if (saved && saved.length > 0) {
+      showSuccess('Download Complete', `Saved ${saved.length} file(s)`);
+    }
+  } catch (error) {
+    showError('Download Failed', error);
+  }
 };
 
 // ─── Reusable file upload component ───
@@ -611,7 +625,15 @@ const GeneratedFilesSection: React.FC<{ files?: Array<{ filename: string; conten
   if (!files || files.length === 0) return null;
   return (
     <Card withBorder mt="sm">
-      <Text fw={500} size="sm" mb="xs">Generated Files ({files.length})</Text>
+      <Group justify="space-between" mb="xs">
+        <Text fw={500} size="sm">Generated Files ({files.length})</Text>
+        {files.length > 1 && (
+          <Button size="xs" variant="light" leftSection={<ArrowDownTrayIcon style={{ width: '0.75rem' }} />}
+            onClick={() => downloadAllGeneratedFiles(files.map(f => ({ filename: f.filename, content: f.content })))}>
+            Download All
+          </Button>
+        )}
+      </Group>
       <Stack gap={4}>
         {files.map((f, i) => (
           <Group key={i} justify="space-between">
@@ -634,7 +656,6 @@ const GeneratedFilesSection: React.FC<{ files?: Array<{ filename: string; conten
 const MetricsTab: React.FC = () => {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [onlyTotal, setOnlyTotal] = useState(false);
-  const [findComma, setFindComma] = useState(false);
   const [startIndicator, setStartIndicator] = useState(',');
   const [initValue, setInitValue] = useState('00000000');
   const [jobs, setJobs] = useState<number>(4);
@@ -650,10 +671,24 @@ const MetricsTab: React.FC = () => {
     setLoading(true); setError(null); setResult(null);
     try {
       const res = await window.electron.analysis.runMetrics({
-        files, onlyTotal, findComma, startIndicator, initValue, jobs
+        files, onlyTotal, startIndicator, initValue, jobs
       });
       setResult(res);
       showSuccess('Metrics Complete', `Analyzed ${files.length} file(s) in ${res.executionTime}ms`);
+
+      // Auto-save to history
+      try {
+        await window.electron.analysis.saveResult({
+          device_id: null,
+          analysis_type: 'metrics',
+          parameters: { onlyTotal, startIndicator, initValue, jobs },
+          result_data: res,
+          execution_time: res.executionTime,
+          files_used: files.map(f => f.name),
+        });
+      } catch {
+        // Silently ignore save failures — don't block the user
+      }
     } catch (e: any) {
       const msg = showError('Metrics Analysis Failed', e);
       setError(msg);
@@ -666,15 +701,16 @@ const MetricsTab: React.FC = () => {
     <Stack>
       <Text size="sm" c="dimmed">Compute PUF quality metrics (Hamming weight, entropy, bitflip %) across binary memory dumps.</Text>
       <FileSourceSelector files={files} setFiles={setFiles} accept=".bin,.txt" metricsMode />
+      {/* Filters commented out for now — kept for future use
       <Group>
         <Switch label="Only Total" checked={onlyTotal} onChange={(e) => setOnlyTotal(e.currentTarget.checked)} />
-        <Switch label="Find Comma" checked={findComma} onChange={(e) => setFindComma(e.currentTarget.checked)} />
       </Group>
       <Group>
         <TextInput label="Start Indicator" value={startIndicator} onChange={(e) => setStartIndicator(e.target.value)} size="xs" w={100} />
         <TextInput label="Init Value (hex)" value={initValue} onChange={(e) => setInitValue(e.target.value)} size="xs" w={120} />
         <NumberInput label="Jobs" value={jobs} onChange={(v) => setJobs(Number(v) || 4)} size="xs" w={80} min={1} max={16} />
       </Group>
+      */}
       <Button onClick={run} loading={loading} disabled={files.length === 0}>Run Metrics Analysis</Button>
       <ResultDisplay result={result} loading={false} error={error} />
     </Stack>
@@ -685,7 +721,6 @@ const MetricsTab: React.FC = () => {
 const StableTab: React.FC = () => {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [keyLength, setKeyLength] = useState<number>(256);
-  const [findComma, setFindComma] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -697,7 +732,7 @@ const StableTab: React.FC = () => {
     }
     setLoading(true); setError(null); setResult(null);
     try {
-      const res = await window.electron.analysis.generateStable({ files, keyLength, findComma });
+      const res = await window.electron.analysis.generateStable({ files, keyLength });
       setResult(res);
       showSuccess('Stable Positions Found', `Found ${res.positions?.length || 0} stable positions from ${files.length} readings in ${res.executionTime}ms`);
     } catch (e: any) {
@@ -712,10 +747,7 @@ const StableTab: React.FC = () => {
     <Stack>
       <Text size="sm" c="dimmed">Identify stable bit positions across multiple PUF readings for key extraction.</Text>
       <FileSourceSelector files={files} setFiles={setFiles} accept=".bin,.txt" />
-      <Group>
-        <NumberInput label="Key Size (bits)" value={keyLength} onChange={(v) => setKeyLength(Number(v) || 256)} min={8} max={1024} w={150} />
-        <Switch label="Find Comma" checked={findComma} onChange={(e) => setFindComma(e.currentTarget.checked)} mt="lg" />
-      </Group>
+      <NumberInput label="Key Size (bits)" value={keyLength} onChange={(v) => setKeyLength(Number(v) || 256)} min={8} max={1024} w={150} />
       <Button onClick={run} loading={loading} disabled={files.length < 2}>Generate Stable Positions</Button>
       <ResultDisplay result={result} loading={false} error={error} />
     </Stack>
@@ -726,7 +758,6 @@ const StableTab: React.FC = () => {
 const ExtractTab: React.FC = () => {
   const [binFiles, setBinFiles] = useState<FileEntry[]>([]);
   const [stableFiles, setStableFiles] = useState<FileEntry[]>([]);
-  const [findComma, setFindComma] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -740,8 +771,7 @@ const ExtractTab: React.FC = () => {
     try {
       const res = await window.electron.analysis.extractKey({
         binFile: binFiles[0],
-        stableFile: stableFiles[0],
-        findComma
+        stableFile: stableFiles[0]
       });
       setResult(res);
       showSuccess('Key Extracted', `Extracted ${res.key?.length || 0}-bit key in ${res.executionTime}ms`);
@@ -760,7 +790,6 @@ const ExtractTab: React.FC = () => {
       <FileSourceSelector files={binFiles} setFiles={setBinFiles} accept=".bin,.txt" multiple={false} label="Upload Binary File" />
       <Text fw={500} size="sm">Stable Positions File</Text>
       <FileUploadZone files={stableFiles} setFiles={setStableFiles} accept=".pos" multiple={false} label="Upload .pos File" />
-      <Switch label="Find Comma" checked={findComma} onChange={(e) => setFindComma(e.currentTarget.checked)} />
       <Button onClick={run} loading={loading} disabled={binFiles.length === 0 || stableFiles.length === 0}>Extract Key</Button>
       <ResultDisplay result={result} loading={false} error={error} />
     </Stack>
@@ -771,8 +800,6 @@ const ExtractTab: React.FC = () => {
 const BinaryConvertTab: React.FC = () => {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [from, setFrom] = useState<string>('bin');
-  const [binWidth, setBinWidth] = useState<number>(8);
-  const [findComma, setFindComma] = useState(false);
   const [lineMode, setLineMode] = useState(false);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -793,7 +820,7 @@ const BinaryConvertTab: React.FC = () => {
       const res = await window.electron.analysis.convertBinary({
         files: lineMode ? undefined : files,
         input: lineMode ? input : undefined,
-        from, binWidth, line: lineMode, findComma
+        from, line: lineMode
       });
       setResult(res);
       showSuccess('Conversion Complete', `Converted ${res.filesProcessed || 1} file(s) from ${from} in ${res.executionTime}ms`);
@@ -815,12 +842,9 @@ const BinaryConvertTab: React.FC = () => {
       ) : (
         <FileSourceSelector files={files} setFiles={setFiles} accept=".bin,.txt" />
       )}
-      <Group>
-        <NumberInput label="Bin Width" value={binWidth} onChange={(v) => setBinWidth(Number(v) || 8)} min={1} max={8} w={100} />
-        <Switch label="Find Comma" checked={findComma} onChange={(e) => setFindComma(e.currentTarget.checked)} mt="lg" />
-      </Group>
       <Button onClick={run} loading={loading}>Convert</Button>
       <ResultDisplay result={result} loading={false} error={error} />
+      {result?.generatedFiles && <GeneratedFilesSection files={result.generatedFiles} />}
     </Stack>
   );
 };
@@ -829,7 +853,6 @@ const BinaryConvertTab: React.FC = () => {
 const HexConvertTab: React.FC = () => {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [from, setFrom] = useState<string>('hex');
-  const [findComma, setFindComma] = useState(false);
   const [lineMode, setLineMode] = useState(false);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -850,7 +873,7 @@ const HexConvertTab: React.FC = () => {
       const res = await window.electron.analysis.convertHex({
         files: lineMode ? undefined : files,
         input: lineMode ? input : undefined,
-        from, line: lineMode, findComma
+        from, line: lineMode
       });
       setResult(res);
       showSuccess('Conversion Complete', `Converted ${res.filesProcessed || 1} file(s) from ${from} in ${res.executionTime}ms`);
@@ -872,106 +895,7 @@ const HexConvertTab: React.FC = () => {
       ) : (
         <FileSourceSelector files={files} setFiles={setFiles} accept=".hex,.txt" />
       )}
-      <Switch label="Find Comma" checked={findComma} onChange={(e) => setFindComma(e.currentTarget.checked)} />
       <Button onClick={run} loading={loading}>Convert</Button>
-      <ResultDisplay result={result} loading={false} error={error} />
-      {result?.generatedFiles && <GeneratedFilesSection files={result.generatedFiles} />}
-    </Stack>
-  );
-};
-
-// ─── Image Conversion Tab ───
-const ImageConvertTab: React.FC = () => {
-  const [files, setFiles] = useState<FileEntry[]>([]);
-  const [from, setFrom] = useState<string>('bin');
-  const [imageWidth, setImageWidth] = useState<number>(32);
-  const [imageHeight, setImageHeight] = useState<number>(0);
-  const [findComma, setFindComma] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const run = async () => {
-    if (files.length === 0) {
-      showError('No Files', 'Please upload at least one file or select readings from a device');
-      return;
-    }
-    setLoading(true); setError(null); setResult(null);
-    try {
-      const res = await window.electron.analysis.convertImage({
-        files, from, imageWidth, imageHeight, findComma
-      });
-      setResult(res);
-      showSuccess('Image Conversion Complete', `Generated ${res.generatedFiles?.length || 0} image(s) in ${res.executionTime}ms`);
-    } catch (e: any) {
-      const msg = showError('Image Conversion Failed', e);
-      setError(msg);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <Stack>
-      <Text size="sm" c="dimmed">Convert between binary memory dumps and PNG images (each pixel = one bit).</Text>
-      <Select label="From Format" data={[{ value: 'bin', label: 'Binary (.bin) -> PNG' }, { value: 'img', label: 'Image (.png) -> Binary' }]} value={from} onChange={(v) => setFrom(v || 'bin')} w={250} />
-      <FileSourceSelector files={files} setFiles={setFiles} accept={from === 'bin' ? '.bin,.txt' : '.png'} />
-      <Group>
-        <NumberInput label="Image Width (bits/px)" value={imageWidth} onChange={(v) => setImageWidth(Number(v) || 32)} min={1} w={150} />
-        <NumberInput label="Image Height (0=auto)" value={imageHeight} onChange={(v) => setImageHeight(Number(v) || 0)} min={0} w={150} />
-        <Switch label="Find Comma" checked={findComma} onChange={(e) => setFindComma(e.currentTarget.checked)} mt="lg" />
-      </Group>
-      <Button onClick={run} loading={loading} disabled={files.length === 0}>Convert</Button>
-      <ResultDisplay result={result} loading={false} error={error} />
-      {result?.generatedFiles && <GeneratedFilesSection files={result.generatedFiles} />}
-    </Stack>
-  );
-};
-
-// ─── Augment Data Tab ───
-const AugmentTab: React.FC = () => {
-  const [files, setFiles] = useState<FileEntry[]>([]);
-  const [flipChance0, setFlipChance0] = useState<number>(8192);
-  const [flipChance1, setFlipChance1] = useState<number>(64);
-  const [augmentFactor, setAugmentFactor] = useState<number>(15);
-  const [bits, setBits] = useState<number>(262144);
-  const [findComma, setFindComma] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const run = async () => {
-    if (files.length === 0) {
-      showError('No Files', 'Please upload at least one file or select readings from a device');
-      return;
-    }
-    setLoading(true); setError(null); setResult(null);
-    try {
-      const res = await window.electron.analysis.augmentData({
-        files, flipChance0, flipChance1, augmentFactor, bits, findComma
-      });
-      setResult(res);
-      showSuccess('Augmentation Complete', `Generated ${res.generatedFiles?.length || 0} augmented file(s) in ${res.executionTime}ms`);
-    } catch (e: any) {
-      const msg = showError('Augmentation Failed', e);
-      setError(msg);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <Stack>
-      <Text size="sm" c="dimmed">Generate augmented training data for AI/ML by introducing controlled bit flips.</Text>
-      <FileSourceSelector files={files} setFiles={setFiles} accept=".bin,.txt" />
-      <Group grow>
-        <NumberInput label="Flip Chance 0-bits (1/n)" value={flipChance0} onChange={(v) => setFlipChance0(Number(v) || 8192)} min={1} />
-        <NumberInput label="Flip Chance 1-bits (1/n)" value={flipChance1} onChange={(v) => setFlipChance1(Number(v) || 64)} min={1} />
-        <NumberInput label="Augment Factor" value={augmentFactor} onChange={(v) => setAugmentFactor(Number(v) || 15)} min={1} />
-        <NumberInput label="Bits" value={bits} onChange={(v) => setBits(Number(v) || 262144)} min={1} />
-      </Group>
-      <Switch label="Find Comma" checked={findComma} onChange={(e) => setFindComma(e.currentTarget.checked)} />
-      <Button onClick={run} loading={loading} disabled={files.length === 0}>Augment Data</Button>
       <ResultDisplay result={result} loading={false} error={error} />
       {result?.generatedFiles && <GeneratedFilesSection files={result.generatedFiles} />}
     </Stack>
@@ -983,10 +907,15 @@ const CorruptTab: React.FC = () => {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [corruptPercentage, setCorruptPercentage] = useState<number>(15);
   const [bits, setBits] = useState<number>(262144);
-  const [findComma, setFindComma] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Each of the 3 regions (top/middle/bottom) gets corruptPercentage/3 % zeroed out
+  const bitsPerRegion = Math.round((corruptPercentage / 100 / 3) * bits);
+  const totalCorrupted = bitsPerRegion * 3;
+
+  const PRESETS = [5, 10, 15, 25, 50];
 
   const run = async () => {
     if (files.length === 0) {
@@ -996,7 +925,7 @@ const CorruptTab: React.FC = () => {
     setLoading(true); setError(null); setResult(null);
     try {
       const res = await window.electron.analysis.corruptData({
-        files, corruptPercentage, bits, findComma
+        files, corruptPercentage, bits
       });
       setResult(res);
       showSuccess('Corruption Complete', `Generated ${res.generatedFiles?.length || 0} corrupted file(s) at ${corruptPercentage}% in ${res.executionTime}ms`);
@@ -1010,52 +939,46 @@ const CorruptTab: React.FC = () => {
 
   return (
     <Stack>
-      <Text size="sm" c="dimmed">Generate corrupted versions of dumps by zeroing out bits at top, middle, and bottom positions.</Text>
+      <Text size="sm" c="dimmed">
+        Zero out bits at the top, middle, and bottom thirds of each dump to simulate partial memory corruption.
+      </Text>
       <FileSourceSelector files={files} setFiles={setFiles} accept=".bin,.txt" />
-      <Group>
-        <NumberInput label="Corrupt Percentage" value={corruptPercentage} onChange={(v) => setCorruptPercentage(Number(v) || 15)} min={1} max={100} w={150} suffix="%" />
-        <NumberInput label="Bits" value={bits} onChange={(v) => setBits(Number(v) || 262144)} min={1} w={150} />
-        <Switch label="Find Comma" checked={findComma} onChange={(e) => setFindComma(e.currentTarget.checked)} mt="lg" />
+      <Group align="flex-end">
+        <NumberInput
+          label="Corruption level"
+          description={`≈ ${totalCorrupted.toLocaleString()} bits zeroed (${bitsPerRegion.toLocaleString()} × 3 regions)`}
+          value={corruptPercentage}
+          onChange={(v) => setCorruptPercentage(Math.min(100, Math.max(1, Number(v) || 15)))}
+          min={1}
+          max={100}
+          step={1}
+          suffix="%"
+          w={200}
+        />
+        <NumberInput
+          label="File size (bits)"
+          description="Expected size of each input file"
+          value={bits}
+          onChange={(v) => setBits(Number(v) || 262144)}
+          min={8}
+          step={8}
+          w={180}
+        />
+      </Group>
+      <Group gap="xs">
+        <Text size="xs" c="dimmed">Presets:</Text>
+        {PRESETS.map((p) => (
+          <Button
+            key={p}
+            size="xs"
+            variant={corruptPercentage === p ? 'filled' : 'light'}
+            onClick={() => setCorruptPercentage(p)}
+          >
+            {p}%
+          </Button>
+        ))}
       </Group>
       <Button onClick={run} loading={loading} disabled={files.length === 0}>Corrupt Data</Button>
-      <ResultDisplay result={result} loading={false} error={error} />
-      {result?.generatedFiles && <GeneratedFilesSection files={result.generatedFiles} />}
-    </Stack>
-  );
-};
-
-// ─── Fix Line Feeds Tab ───
-const FixLFTab: React.FC = () => {
-  const [files, setFiles] = useState<FileEntry[]>([]);
-  const [outSuffix, setOutSuffix] = useState('-fixed');
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const run = async () => {
-    if (files.length === 0) {
-      showError('No Files', 'Please upload at least one file or select readings from a device');
-      return;
-    }
-    setLoading(true); setError(null); setResult(null);
-    try {
-      const res = await window.electron.analysis.fixLineFeeds({ files, outSuffix });
-      setResult(res);
-      showSuccess('Line Feeds Fixed', `Fixed ${res.filesProcessed} file(s) in ${res.executionTime}ms`);
-    } catch (e: any) {
-      const msg = showError('Fix Line Feeds Failed', e);
-      setError(msg);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <Stack>
-      <Text size="sm" c="dimmed">Fix CRLF to LF corruption in binary memory dumps (common when transferring across OSes).</Text>
-      <FileSourceSelector files={files} setFiles={setFiles} accept=".bin" />
-      <TextInput label="Output Suffix" value={outSuffix} onChange={(e) => setOutSuffix(e.target.value)} w={150} />
-      <Button onClick={run} loading={loading} disabled={files.length === 0}>Fix Line Feeds</Button>
       <ResultDisplay result={result} loading={false} error={error} />
       {result?.generatedFiles && <GeneratedFilesSection files={result.generatedFiles} />}
     </Stack>
@@ -1128,17 +1051,22 @@ const NistTab: React.FC = () => {
 // ─── Random Data Tab ───
 const RandomTab: React.FC = () => {
   const [bits, setBits] = useState<number>(262144);
-  const [hammingWeight, setHammingWeight] = useState<number>(100);
-  const [hammingWeightMultiplier, setHammingWeightMultiplier] = useState<number>(1);
+  const [hwPercent, setHwPercent] = useState<number>(50);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // CLI expects hammingWeightMultiplier / hammingWeight as the fraction of 1-bits.
+  // We expose a simple 0–100% input and convert: multiplier=hwPercent, denominator=100.
+  const expectedOnes = Math.round((hwPercent / 100) * bits);
 
   const run = async () => {
     setLoading(true); setError(null); setResult(null);
     try {
       const res = await window.electron.analysis.generateRandom({
-        bits, hammingWeight, hammingWeightMultiplier
+        bits,
+        hammingWeight: 100,
+        hammingWeightMultiplier: hwPercent,
       });
       setResult(res);
       showSuccess('Random Data Generated', `Generated ${res.generatedFiles?.length || 0} file(s) with ${bits} bits in ${res.executionTime}ms`);
@@ -1152,11 +1080,27 @@ const RandomTab: React.FC = () => {
 
   return (
     <Stack>
-      <Text size="sm" c="dimmed">Generate random binary data with a configurable fractional Hamming weight.</Text>
-      <Group>
-        <NumberInput label="Bits" value={bits} onChange={(v) => setBits(Number(v) || 262144)} min={1} w={150} />
-        <NumberInput label="Hamming Weight (inverse)" value={hammingWeight} onChange={(v) => setHammingWeight(Number(v) || 100)} min={1} w={180} />
-        <NumberInput label="HW Multiplier" value={hammingWeightMultiplier} onChange={(v) => setHammingWeightMultiplier(Number(v) || 1)} min={1} w={150} />
+      <Text size="sm" c="dimmed">Generate random binary data with a configurable Hamming weight (fraction of 1-bits).</Text>
+      <Group align="flex-end">
+        <NumberInput
+          label="Bits to generate"
+          value={bits}
+          onChange={(v) => setBits(Number(v) || 262144)}
+          min={8}
+          step={8}
+          w={160}
+        />
+        <NumberInput
+          label="Hamming weight (%)"
+          description={`≈ ${expectedOnes.toLocaleString()} ones out of ${bits.toLocaleString()} bits`}
+          value={hwPercent}
+          onChange={(v) => setHwPercent(Math.min(100, Math.max(0, Number(v) || 50)))}
+          min={0}
+          max={100}
+          step={1}
+          suffix="%"
+          w={200}
+        />
       </Group>
       <Button onClick={run} loading={loading}>Generate Random Data</Button>
       <ResultDisplay result={result} loading={false} error={error} />
@@ -1173,16 +1117,35 @@ const RepeatedTab: React.FC = () => {
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const patternValid = /^[01]+$/.test(data.trim());
+  const patternLength = data.trim().length;
+  const patternOnes = (data.match(/1/g) || []).length;
+  const patternHW = patternLength > 0 ? ((patternOnes / patternLength) * 100).toFixed(1) : '0.0';
+  const repeatCount = patternLength > 0 ? Math.ceil(bits / patternLength) : 0;
+
+  const PRESETS = [
+    { label: 'All 0s', value: '00000000' },
+    { label: 'All 1s', value: '11111111' },
+    { label: 'Alternating', value: '01010101' },
+    { label: '25% HW', value: '00010001' },
+    { label: '75% HW', value: '11101110' },
+  ];
+
+  const handlePatternChange = (val: string) => {
+    // Strip any non-binary characters as user types
+    setData(val.replace(/[^01]/g, ''));
+  };
+
   const run = async () => {
-    if (!data.trim()) {
-      showError('No Pattern', 'Please enter a bit pattern to repeat');
+    if (!data.trim() || !patternValid) {
+      showError('Invalid Pattern', 'Pattern must contain only 0s and 1s');
       return;
     }
     setLoading(true); setError(null); setResult(null);
     try {
-      const res = await window.electron.analysis.generateRepeated({ bits, data });
+      const res = await window.electron.analysis.generateRepeated({ bits, data: data.trim() });
       setResult(res);
-      showSuccess('Repeated Data Generated', `Generated file with pattern "${data}" repeated to ${bits} bits in ${res.executionTime}ms`);
+      showSuccess('Repeated Data Generated', `Generated file with pattern "${data.trim()}" × ${repeatCount} repetitions in ${res.executionTime}ms`);
     } catch (e: any) {
       const msg = showError('Repeated Generation Failed', e);
       setError(msg);
@@ -1193,12 +1156,46 @@ const RepeatedTab: React.FC = () => {
 
   return (
     <Stack>
-      <Text size="sm" c="dimmed">Generate a binary dump by repeating a given bit pattern to fill the specified size.</Text>
-      <Group>
-        <NumberInput label="Bits" value={bits} onChange={(v) => setBits(Number(v) || 262144)} min={1} w={150} />
-        <TextInput label="Bit Pattern" value={data} onChange={(e) => setData(e.target.value)} w={200} placeholder="00000000" />
+      <Text size="sm" c="dimmed">Generate a binary dump by repeating a bit pattern to fill the specified size.</Text>
+      <Group align="flex-end">
+        <NumberInput
+          label="Bits to generate"
+          value={bits}
+          onChange={(v) => setBits(Number(v) || 262144)}
+          min={8}
+          step={8}
+          w={160}
+        />
+        <TextInput
+          label="Bit pattern"
+          description={
+            patternLength === 0
+              ? 'Enter a sequence of 0s and 1s'
+              : patternValid
+              ? `${patternLength} bits · ${patternHW}% Hamming weight · repeated ${repeatCount}×`
+              : 'Only 0 and 1 characters allowed'
+          }
+          value={data}
+          onChange={(e) => handlePatternChange(e.target.value)}
+          placeholder="00000000"
+          error={data.length > 0 && !patternValid ? 'Invalid characters' : undefined}
+          w={280}
+        />
       </Group>
-      <Button onClick={run} loading={loading}>Generate Repeated Data</Button>
+      <Group gap="xs">
+        <Text size="xs" c="dimmed">Presets:</Text>
+        {PRESETS.map((p) => (
+          <Button
+            key={p.value}
+            size="xs"
+            variant={data === p.value ? 'filled' : 'light'}
+            onClick={() => setData(p.value)}
+          >
+            {p.label}
+          </Button>
+        ))}
+      </Group>
+      <Button onClick={run} loading={loading} disabled={!patternValid || patternLength === 0}>Generate Repeated Data</Button>
       <ResultDisplay result={result} loading={false} error={error} />
       {result?.generatedFile && <GeneratedFilesSection files={[result.generatedFile]} />}
     </Stack>
@@ -1224,10 +1221,7 @@ export const Analysis: React.FC = () => {
             <Tabs.Tab value="extract" leftSection={<KeyIcon style={{ width: '1rem' }} />}>Extract Key</Tabs.Tab>
             <Tabs.Tab value="binary" leftSection={<ArrowsRightLeftIcon style={{ width: '1rem' }} />}>Binary Conv.</Tabs.Tab>
             <Tabs.Tab value="hex" leftSection={<ArrowsRightLeftIcon style={{ width: '1rem' }} />}>Hex Conv.</Tabs.Tab>
-            <Tabs.Tab value="image" leftSection={<PhotoIcon style={{ width: '1rem' }} />}>Image Conv.</Tabs.Tab>
-            <Tabs.Tab value="augment" leftSection={<CubeIcon style={{ width: '1rem' }} />}>Augment</Tabs.Tab>
             <Tabs.Tab value="corrupt" leftSection={<WrenchScrewdriverIcon style={{ width: '1rem' }} />}>Corrupt</Tabs.Tab>
-            <Tabs.Tab value="fixlf" leftSection={<WrenchScrewdriverIcon style={{ width: '1rem' }} />}>Fix LF</Tabs.Tab>
             <Tabs.Tab value="nist" leftSection={<ChartBarIcon style={{ width: '1rem' }} />}>NIST</Tabs.Tab>
             <Tabs.Tab value="random" leftSection={<CubeIcon style={{ width: '1rem' }} />}>Random</Tabs.Tab>
             <Tabs.Tab value="repeated" leftSection={<CubeIcon style={{ width: '1rem' }} />}>Repeated</Tabs.Tab>
@@ -1239,10 +1233,7 @@ export const Analysis: React.FC = () => {
             <Tabs.Panel value="extract"><ExtractTab /></Tabs.Panel>
             <Tabs.Panel value="binary"><BinaryConvertTab /></Tabs.Panel>
             <Tabs.Panel value="hex"><HexConvertTab /></Tabs.Panel>
-            <Tabs.Panel value="image"><ImageConvertTab /></Tabs.Panel>
-            <Tabs.Panel value="augment"><AugmentTab /></Tabs.Panel>
             <Tabs.Panel value="corrupt"><CorruptTab /></Tabs.Panel>
-            <Tabs.Panel value="fixlf"><FixLFTab /></Tabs.Panel>
             <Tabs.Panel value="nist"><NistTab /></Tabs.Panel>
             <Tabs.Panel value="random"><RandomTab /></Tabs.Panel>
             <Tabs.Panel value="repeated"><RepeatedTab /></Tabs.Panel>

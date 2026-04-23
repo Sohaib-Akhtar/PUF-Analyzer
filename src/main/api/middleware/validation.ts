@@ -47,7 +47,6 @@ export const schemas: ValidationSchemas = {
         minItems: 1
       },
       onlyTotal: { type: 'boolean' },
-      findComma: { type: 'boolean' },
       startIndicator: { type: 'string', maxLength: 1 },
       initValue: { type: 'string', pattern: '^[0-9a-fA-F]+$' },
       jobs: { type: 'number', minimum: 1, maximum: 16 }
@@ -71,8 +70,7 @@ export const schemas: ValidationSchemas = {
         },
         minItems: 2
       },
-      keyLength: { type: 'number', minimum: 8, maximum: 1024 },
-      findComma: { type: 'boolean' }
+      keyLength: { type: 'number', minimum: 8, maximum: 1024 }
     },
     required: ['files', 'keyLength']
   },
@@ -98,7 +96,6 @@ export const schemas: ValidationSchemas = {
         },
         required: ['name', 'data', 'size']
       },
-      findComma: { type: 'boolean' }
     },
     required: ['binFile', 'stableFile']
   },
@@ -120,9 +117,7 @@ export const schemas: ValidationSchemas = {
       },
       input: { type: 'string' },
       from: { type: 'string', enum: ['bin', 'txt'] },
-      binWidth: { type: 'number', minimum: 1, maximum: 8 },
-      line: { type: 'boolean' },
-      findComma: { type: 'boolean' }
+      line: { type: 'boolean' }
     },
     required: ['from']
   }

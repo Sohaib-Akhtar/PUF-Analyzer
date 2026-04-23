@@ -12,9 +12,7 @@ interface ConvertRouteBody {
   }>;
   input?: string;
   from: 'bin' | 'txt';
-  binWidth?: number;
   line?: boolean;
-  findComma?: boolean;
 }
 
 interface HexRouteBody {
@@ -26,7 +24,6 @@ interface HexRouteBody {
   input?: string;
   from: 'hex' | 'txt';
   line?: boolean;
-  findComma?: boolean;
 }
 
 interface ImageRouteBody {
@@ -38,7 +35,6 @@ interface ImageRouteBody {
   from: 'bin' | 'img';
   imageWidth?: number;
   imageHeight?: number;
-  findComma?: boolean;
 }
 
 export async function convertRoutes(fastify: FastifyInstance) {
@@ -83,21 +79,9 @@ export async function convertRoutes(fastify: FastifyInstance) {
             enum: ['bin', 'txt'],
             description: 'Source format to convert from'
           },
-          binWidth: {
-            type: 'number',
-            description: 'Binary width for conversion',
-            minimum: 1,
-            maximum: 8,
-            default: 8
-          },
           line: {
             type: 'boolean',
             description: 'Use line mode with input string',
-            default: false
-          },
-          findComma: { 
-            type: 'boolean', 
-            description: 'Find comma delimiter in data',
             default: false
           }
         },
@@ -116,20 +100,12 @@ export async function convertRoutes(fastify: FastifyInstance) {
     }
   }, async (request: FastifyRequest<{ Body: ConvertRouteBody }>, reply: FastifyReply) => {
     try {
-      const { files: rawFiles, input, from, binWidth = 8, line = false, findComma = false } = request.body;
+      const { files: rawFiles, input, from, line = false } = request.body;
 
       if (!from || !['bin', 'txt'].includes(from)) {
         return reply.status(400).send({
           success: false,
           error: 'Parameter "from" must be either "bin" or "txt"',
-          timestamp: new Date().toISOString()
-        } as ApiResponseDto);
-      }
-
-      if (binWidth <= 0 || binWidth > 8) {
-        return reply.status(400).send({
-          success: false,
-          error: 'Binary width must be between 1 and 8',
           timestamp: new Date().toISOString()
         } as ApiResponseDto);
       }
@@ -178,9 +154,7 @@ export async function convertRoutes(fastify: FastifyInstance) {
         files: files || undefined,
         input,
         from,
-        binWidth,
-        line,
-        findComma
+        line
       };
 
       const result = await javaCliService.convertBinary(convertRequest);
@@ -224,15 +198,14 @@ export async function convertRoutes(fastify: FastifyInstance) {
           },
           input: { type: 'string', description: 'Input string for line mode' },
           from: { type: 'string', enum: ['hex', 'txt'], description: 'Source format' },
-          line: { type: 'boolean', description: 'Use line mode with input string', default: false },
-          findComma: { type: 'boolean', description: 'Find comma delimiter in data', default: false }
+          line: { type: 'boolean', description: 'Use line mode with input string', default: false }
         },
         required: ['from']
       }
     }
   }, async (request: FastifyRequest<{ Body: HexRouteBody }>, reply: FastifyReply) => {
     try {
-      const { files: rawFiles, input, from, line = false, findComma = false } = request.body;
+      const { files: rawFiles, input, from, line = false } = request.body;
 
       if (!from || !['hex', 'txt'].includes(from)) {
         return reply.status(400).send({
@@ -285,8 +258,7 @@ export async function convertRoutes(fastify: FastifyInstance) {
         files: files || undefined,
         input,
         from,
-        line,
-        findComma
+        line
       };
 
       const result = await javaCliService.convertHex(hexRequest);
@@ -329,15 +301,14 @@ export async function convertRoutes(fastify: FastifyInstance) {
           },
           from: { type: 'string', enum: ['bin', 'img'], description: 'Source format' },
           imageWidth: { type: 'number', description: 'Image width in pixels', default: 32 },
-          imageHeight: { type: 'number', description: 'Image height (0 = auto)', default: 0 },
-          findComma: { type: 'boolean', description: 'Find comma delimiter in data', default: false }
+          imageHeight: { type: 'number', description: 'Image height (0 = auto)', default: 0 }
         },
         required: ['files', 'from']
       }
     }
   }, async (request: FastifyRequest<{ Body: ImageRouteBody }>, reply: FastifyReply) => {
     try {
-      const { files: rawFiles, from, imageWidth, imageHeight, findComma = false } = request.body;
+      const { files: rawFiles, from, imageWidth, imageHeight } = request.body;
 
       if (!rawFiles || rawFiles.length === 0) {
         return reply.status(400).send({
@@ -365,8 +336,7 @@ export async function convertRoutes(fastify: FastifyInstance) {
         files,
         from,
         imageWidth,
-        imageHeight,
-        findComma
+        imageHeight
       };
 
       const result = await javaCliService.convertImage(imageRequest);

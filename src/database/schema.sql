@@ -42,7 +42,7 @@ END;
 
 CREATE TABLE IF NOT EXISTS puf_analysis_results (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    device_id INTEGER NOT NULL,
+    device_id INTEGER,
     analysis_type TEXT NOT NULL,
     parameters TEXT NOT NULL,
     result_data TEXT NOT NULL,
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS puf_analysis_results (
     files_used TEXT NOT NULL,
     status TEXT DEFAULT 'completed',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
+    FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS puf_analysis_files (

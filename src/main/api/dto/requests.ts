@@ -8,7 +8,6 @@ export interface FileDto {
 export interface MetricsRequestDto {
   files: FileDto[];
   onlyTotal?: boolean;
-  findComma?: boolean;
   startIndicator?: string;
   initValue?: string;
   jobs?: number;
@@ -17,22 +16,18 @@ export interface MetricsRequestDto {
 export interface StableRequestDto {
   files: FileDto[];
   keyLength: number;
-  findComma?: boolean;
 }
 
 export interface ExtractRequestDto {
   binFile: FileDto;
   stableFile: FileDto;
-  findComma?: boolean;
 }
 
 export interface ConvertRequestDto {
   files?: FileDto[];
   input?: string;
   from: 'bin' | 'txt';
-  binWidth?: number;
   line?: boolean;
-  findComma?: boolean;
 }
 
 export interface HexConvertRequestDto {
@@ -40,7 +35,6 @@ export interface HexConvertRequestDto {
   input?: string;
   from: 'hex' | 'txt';
   line?: boolean;
-  findComma?: boolean;
 }
 
 export interface ImageConvertRequestDto {
@@ -48,7 +42,6 @@ export interface ImageConvertRequestDto {
   from: 'bin' | 'img';
   imageWidth?: number;
   imageHeight?: number;
-  findComma?: boolean;
 }
 
 export interface AugmentRequestDto {
@@ -60,7 +53,6 @@ export interface AugmentRequestDto {
   regenOriginal?: boolean;
   deleteOriginal?: boolean;
   suffix?: string;
-  findComma?: boolean;
 }
 
 export interface CorruptRequestDto {
@@ -69,7 +61,6 @@ export interface CorruptRequestDto {
   bits?: number;
   regenOriginal?: boolean;
   deleteOriginal?: boolean;
-  findComma?: boolean;
 }
 
 export interface FixLFRequestDto {

@@ -11,7 +11,6 @@ interface MetricsRouteBody {
     size: number;
   }>;
   onlyTotal?: boolean;
-  findComma?: boolean;
   startIndicator?: string;
   initValue?: string;
   jobs?: number;
@@ -55,11 +54,6 @@ export async function metricsRoutes(fastify: FastifyInstance) {
             description: 'Return only total metrics',
             default: false
           },
-          findComma: { 
-            type: 'boolean', 
-            description: 'Find comma delimiter in data',
-            default: false
-          },
           startIndicator: { 
             type: 'string', 
             description: 'Start character indicator',
@@ -83,7 +77,7 @@ export async function metricsRoutes(fastify: FastifyInstance) {
     }
   }, async (request: FastifyRequest<{ Body: MetricsRouteBody }>, reply: FastifyReply) => {
     try {
-      const { files: rawFiles, onlyTotal = false, findComma = false, startIndicator = ',', initValue = '00000000', jobs = 4 } = request.body;
+      const { files: rawFiles, onlyTotal = false, startIndicator = ',', initValue = '00000000', jobs = 4 } = request.body;
 
       if (!rawFiles || rawFiles.length === 0) {
         return reply.status(400).send({
@@ -116,7 +110,6 @@ export async function metricsRoutes(fastify: FastifyInstance) {
       const metricsRequest: MetricsRequestDto = {
         files,
         onlyTotal,
-        findComma,
         startIndicator,
         initValue,
         jobs

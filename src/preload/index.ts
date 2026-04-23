@@ -34,6 +34,8 @@ const api = {
     writeFile: (filePath: string, content: string) => ipcRenderer.invoke('filesystem:write-file', filePath, content),
     uploadPufFiles: () => ipcRenderer.invoke('filesystem:upload-puf-files'),
     downloadReading: (readingId: number, format: 'bin' | 'txt') => ipcRenderer.invoke('filesystem:download-reading', readingId, format),
+    saveGeneratedFile: (filename: string, base64Content: string) => ipcRenderer.invoke('filesystem:save-generated-file', filename, base64Content),
+    saveGeneratedFiles: (files: Array<{ filename: string; content: string }>) => ipcRenderer.invoke('filesystem:save-generated-files', files),
   },
 
   // Analysis operations (Java CLI bridge)
@@ -65,6 +67,7 @@ const api = {
     getResult: (id: number) => ipcRenderer.invoke('analysis:get-result', id),
     getDeviceHistory: (deviceId: number) => ipcRenderer.invoke('analysis:get-device-history', deviceId),
     getRecent: (limit?: number) => ipcRenderer.invoke('analysis:get-recent', limit),
+    getHistory: (limit?: number) => ipcRenderer.invoke('analysis:get-history', limit || 100),
     getCount: () => ipcRenderer.invoke('analysis:get-count'),
     deleteResult: (id: number) => ipcRenderer.invoke('analysis:delete-result', id),
     search: (searchTerm: string) => ipcRenderer.invoke('analysis:search', searchTerm),

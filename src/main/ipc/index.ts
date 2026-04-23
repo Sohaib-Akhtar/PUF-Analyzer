@@ -285,6 +285,55 @@ export const setupIpcHandlers = (): void => {
     }
   });
 
+  // Save a single generated file via native save dialog
+  ipcMain.handle('filesystem:save-generated-file', async (_, filename: string, base64Content: string) => {
+    try {
+      const ext = filename.split('.').pop() || '*';
+      const result = await dialog.showSaveDialog({
+        defaultPath: filename,
+        filters: [
+          { name: ext.toUpperCase() + ' Files', extensions: [ext] },
+          { name: 'All Files', extensions: ['*'] },
+        ],
+      });
+
+      if (!result.canceled && result.filePath) {
+        const buffer = Buffer.from(base64Content, 'base64');
+        await writeFile(result.filePath, buffer);
+        return result.filePath;
+      }
+      return null;
+    } catch (error) {
+      throw new Error(`Failed to save file: ${error}`);
+    }
+  });
+
+  // Save multiple generated files to a chosen directory
+  ipcMain.handle('filesystem:save-generated-files', async (_, files: Array<{ filename: string; content: string }>) => {
+    try {
+      const result = await dialog.showOpenDialog({
+        properties: ['openDirectory', 'createDirectory'],
+        title: 'Select folder to save generated files',
+      });
+
+      if (!result.canceled && result.filePaths.length > 0) {
+        const dir = result.filePaths[0];
+        const { join } = await import('path');
+        const saved: string[] = [];
+        for (const file of files) {
+          const outPath = join(dir, file.filename);
+          const buffer = Buffer.from(file.content, 'base64');
+          await writeFile(outPath, buffer);
+          saved.push(outPath);
+        }
+        return saved;
+      }
+      return null;
+    } catch (error) {
+      throw new Error(`Failed to save files: ${error}`);
+    }
+  });
+
   // ──────────────────────────────────────────────
   // Analysis operations (bridge to Java CLI)
   // ──────────────────────────────────────────────
@@ -299,18 +348,18 @@ export const setupIpcHandlers = (): void => {
   ipcMain.handle('analysis:run-metrics', async (_, params: {
     files: Array<{ name: string; data: string; size: number }>;
     onlyTotal?: boolean;
-    findComma?: boolean;
     startIndicator?: string;
     initValue?: string;
     jobs?: number;
   }) => {
     try {
-      const files = params.files.map(f => ({
+      const { files: rawFiles, ...rest } = params;
+      const files = rawFiles.map(f => ({
         name: f.name,
         data: Buffer.from(f.data, 'base64'),
         size: f.size
       }));
-      return await javaCliService.executeMetrics({ files, ...params });
+      return await javaCliService.executeMetrics({ ...rest, files });
     } catch (error) {
       throw new Error(`Failed to run metrics: ${error}`);
     }
@@ -319,7 +368,6 @@ export const setupIpcHandlers = (): void => {
   ipcMain.handle('analysis:generate-stable', async (_, params: {
     files: Array<{ name: string; data: string; size: number }>;
     keyLength: number;
-    findComma?: boolean;
   }) => {
     try {
       const files = params.files.map(f => ({
@@ -327,7 +375,7 @@ export const setupIpcHandlers = (): void => {
         data: Buffer.from(f.data, 'base64'),
         size: f.size
       }));
-      return await javaCliService.generateStable({ files, keyLength: params.keyLength, findComma: params.findComma });
+      return await javaCliService.generateStable({ files, keyLength: params.keyLength });
     } catch (error) {
       throw new Error(`Failed to generate stable positions: ${error}`);
     }
@@ -336,12 +384,11 @@ export const setupIpcHandlers = (): void => {
   ipcMain.handle('analysis:extract-key', async (_, params: {
     binFile: { name: string; data: string; size: number };
     stableFile: { name: string; data: string; size: number };
-    findComma?: boolean;
   }) => {
     try {
       const binFile = { name: params.binFile.name, data: Buffer.from(params.binFile.data, 'base64'), size: params.binFile.size };
       const stableFile = { name: params.stableFile.name, data: Buffer.from(params.stableFile.data, 'base64'), size: params.stableFile.size };
-      return await javaCliService.extractKey({ binFile, stableFile, findComma: params.findComma });
+      return await javaCliService.extractKey({ binFile, stableFile });
     } catch (error) {
       throw new Error(`Failed to extract key: ${error}`);
     }
@@ -351,17 +398,16 @@ export const setupIpcHandlers = (): void => {
     files?: Array<{ name: string; data: string; size: number }>;
     input?: string;
     from: 'bin' | 'txt';
-    binWidth?: number;
     line?: boolean;
-    findComma?: boolean;
   }) => {
     try {
-      const files = params.files?.map(f => ({
+      const { files: rawFiles, ...rest } = params;
+      const files = rawFiles?.map(f => ({
         name: f.name,
         data: Buffer.from(f.data, 'base64'),
         size: f.size
       }));
-      return await javaCliService.convertBinary({ ...params, files });
+      return await javaCliService.convertBinary({ ...rest, files });
     } catch (error) {
       throw new Error(`Failed to convert binary: ${error}`);
     }
@@ -372,15 +418,15 @@ export const setupIpcHandlers = (): void => {
     input?: string;
     from: 'hex' | 'txt';
     line?: boolean;
-    findComma?: boolean;
   }) => {
     try {
-      const files = params.files?.map(f => ({
+      const { files: rawFiles, ...rest } = params;
+      const files = rawFiles?.map(f => ({
         name: f.name,
         data: Buffer.from(f.data, 'base64'),
         size: f.size
       }));
-      return await javaCliService.convertHex({ ...params, files });
+      return await javaCliService.convertHex({ ...rest, files });
     } catch (error) {
       throw new Error(`Failed to convert hex: ${error}`);
     }
@@ -391,7 +437,6 @@ export const setupIpcHandlers = (): void => {
     from: 'bin' | 'img';
     imageWidth?: number;
     imageHeight?: number;
-    findComma?: boolean;
   }) => {
     try {
       const files = params.files.map(f => ({
@@ -399,7 +444,7 @@ export const setupIpcHandlers = (): void => {
         data: Buffer.from(f.data, 'base64'),
         size: f.size
       }));
-      return await javaCliService.convertImage({ files, from: params.from, imageWidth: params.imageWidth, imageHeight: params.imageHeight, findComma: params.findComma });
+      return await javaCliService.convertImage({ files, from: params.from, imageWidth: params.imageWidth, imageHeight: params.imageHeight });
     } catch (error) {
       throw new Error(`Failed to convert image: ${error}`);
     }
@@ -414,15 +459,15 @@ export const setupIpcHandlers = (): void => {
     regenOriginal?: boolean;
     deleteOriginal?: boolean;
     suffix?: string;
-    findComma?: boolean;
   }) => {
     try {
-      const files = params.files.map(f => ({
+      const { files: rawFiles, ...rest } = params;
+      const files = rawFiles.map(f => ({
         name: f.name,
         data: Buffer.from(f.data, 'base64'),
         size: f.size
       }));
-      return await javaCliService.augmentData({ files, ...params });
+      return await javaCliService.augmentData({ ...rest, files });
     } catch (error) {
       throw new Error(`Failed to augment data: ${error}`);
     }
@@ -434,15 +479,15 @@ export const setupIpcHandlers = (): void => {
     bits?: number;
     regenOriginal?: boolean;
     deleteOriginal?: boolean;
-    findComma?: boolean;
   }) => {
     try {
-      const files = params.files.map(f => ({
+      const { files: rawFiles, ...rest } = params;
+      const files = rawFiles.map(f => ({
         name: f.name,
         data: Buffer.from(f.data, 'base64'),
         size: f.size
       }));
-      return await javaCliService.corruptData({ files, ...params });
+      return await javaCliService.corruptData({ ...rest, files });
     } catch (error) {
       throw new Error(`Failed to corrupt data: ${error}`);
     }
@@ -542,6 +587,15 @@ export const setupIpcHandlers = (): void => {
       return analysisService.getRecentAnalyses(limit);
     } catch (error) {
       throw new Error(`Failed to get recent analyses: ${error}`);
+    }
+  });
+
+  ipcMain.handle('analysis:get-history', async (_, limit: number = 100) => {
+    if (!analysisService) throw new Error('Database not available');
+    try {
+      return analysisService.getAnalysisHistory(limit);
+    } catch (error) {
+      throw new Error(`Failed to get analysis history: ${error}`);
     }
   });
 

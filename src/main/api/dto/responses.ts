@@ -57,6 +57,7 @@ export interface ConversionResultDto {
   outputFormat: string;
   filesProcessed: number;
   executionTime: number;
+  generatedFiles?: GeneratedFileDto[];
 }
 
 export interface GeneratedFileDto {

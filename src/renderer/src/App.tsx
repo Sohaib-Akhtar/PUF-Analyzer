@@ -7,6 +7,7 @@ import { Footer } from '@/renderer/components/Footer';
 import { Dashboard } from '@/renderer/pages/Dashboard';
 import { Devices } from '@/renderer/pages/Devices';
 import { Analysis } from '@/renderer/pages/Analysis';
+import { History } from '@/renderer/pages/History';
 
 const App: React.FC = () => {
   return (
@@ -30,6 +31,7 @@ const App: React.FC = () => {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/devices" element={<Devices />} />
           <Route path="/analysis" element={<Analysis />} />
+          <Route path="/history" element={<History />} />
         </Routes>
       </AppShell.Main>
       

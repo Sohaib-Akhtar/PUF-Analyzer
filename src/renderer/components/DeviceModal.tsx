@@ -141,6 +141,8 @@ export const DeviceModal: React.FC<DeviceModalProps> = ({
           if (onRefresh) {
             onRefresh();
           }
+          
+          onClose();
         }
         
         const errorCount = results.filter((r: FileUploadResult) => !r.success).length;

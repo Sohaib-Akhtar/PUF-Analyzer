@@ -56,27 +56,91 @@ export class JavaCliService {
     return join(process.resourcesPath, 'pufmetrics.jar');
   }
 
+  /**
+   * Check if a Buffer contains text-encoded binary data (ASCII '0'/'1' with optional whitespace).
+   * The Java CLI expects raw binary files where each byte = 8 data bits.
+   * Text files store one bit per character ('0'=0x30, '1'=0x31), which the CLI misinterprets.
+   */
+  private isTextBinaryData(data: Buffer): boolean {
+    if (data.length === 0) return false;
+    let start = 0;
+    // Skip UTF-8 BOM if present
+    if (data.length >= 3 && data[0] === 0xEF && data[1] === 0xBB && data[2] === 0xBF) {
+      start = 3;
+    }
+    let hasBinaryDigits = false;
+    for (let i = start; i < data.length; i++) {
+      const byte = data[i];
+      if (byte === 0x30 || byte === 0x31) {
+        hasBinaryDigits = true;
+      } else if (byte !== 0x0A && byte !== 0x0D && byte !== 0x20 && byte !== 0x09) {
+        // Found a byte that's not '0', '1', or whitespace → not text binary
+        return false;
+      }
+    }
+    return hasBinaryDigits;
+  }
+
+  /**
+   * Convert a text binary string (e.g. "01001101...") to actual binary bytes.
+   * Groups every 8 binary digits into one byte. This is required because the
+   * Java CLI metrics command reads files as raw bytes, processing each byte as 8 bits.
+   */
+  private textBinaryToBytes(textData: Buffer): Buffer {
+    const text = textData.toString('utf-8');
+    // Strip everything except '0' and '1'
+    const binaryString = text.replace(/[^01]/g, '');
+    if (binaryString.length === 0) return Buffer.alloc(0);
+
+    // Pad to a multiple of 8 so the last byte is complete
+    const paddedLength = Math.ceil(binaryString.length / 8) * 8;
+    const padded = binaryString.padEnd(paddedLength, '0');
+
+    const bytes = Buffer.alloc(padded.length / 8);
+    for (let i = 0; i < padded.length; i += 8) {
+      bytes[i / 8] = parseInt(padded.substring(i, i + 8), 2);
+    }
+    return bytes;
+  }
+
+  /**
+   * Prepare a file for the Java CLI: if it is a text binary file, convert it
+   * to actual binary bytes so the CLI processes the correct number of bits.
+   * Returns { data, name } with potentially converted data and .bin extension.
+   */
+  private prepareFileForCli(file: { name: string; data: Buffer }): { name: string; data: Buffer } {
+    if (this.isTextBinaryData(file.data)) {
+      const convertedData = this.textBinaryToBytes(file.data);
+      const convertedName = file.name.replace(/\.txt$/i, '.bin');
+      return { name: convertedName, data: convertedData };
+    }
+    return { name: file.name, data: file.data };
+  }
+
   async executeMetrics(request: MetricsRequestDto): Promise<PufAnalysisResultDto> {
     const tempDir = await mkdtemp(join(tmpdir(), 'puf-metrics-'));
     const tempFiles: string[] = [];
+    const originalNames: string[] = [];
 
     try {
       for (const file of request.files) {
-        const tempFilePath = join(tempDir, file.name);
-        await writeFile(tempFilePath, file.data);
+        // Convert text binary files to actual binary bytes for the Java CLI
+        const prepared = this.prepareFileForCli(file);
+        const tempFilePath = join(tempDir, prepared.name);
+        await writeFile(tempFilePath, prepared.data);
         tempFiles.push(tempFilePath);
+        originalNames.push(file.name);
       }
 
       const args = ['metrics'];
       if (request.onlyTotal) args.push('--only-total');
-      if (request.findComma) args.push('--find-comma');
       if (request.startIndicator) args.push('--start-indicator', request.startIndicator);
       if (request.initValue) args.push('--init-value', request.initValue);
       if (request.jobs) args.push('--jobs', request.jobs.toString());
       args.push(...tempFiles);
 
       const result = await this.executeCommand(args);
-      return this.parseMetricsOutput(result.stdout, request.files.map(f => f.name), result.executionTime);
+      return this.parseMetricsOutput(result.stdout, originalNames, result.executionTime);
     } finally {
       await this.cleanupTempFiles([tempDir, ...tempFiles]);
     }
@@ -88,8 +152,9 @@ export class JavaCliService {
 
     try {
       for (const file of request.files) {
-        const tempFilePath = join(tempDir, file.name);
-        await writeFile(tempFilePath, file.data);
+        const prepared = this.prepareFileForCli(file);
+        const tempFilePath = join(tempDir, prepared.name);
+        await writeFile(tempFilePath, prepared.data);
         tempFiles.push(tempFilePath);
       }
 
@@ -99,8 +164,6 @@ export class JavaCliService {
         '--key-size', request.keyLength.toString(),
         '--out-file', outputFile
       ];
-      
-      if (request.findComma) args.push('--find-comma');
       args.push(...tempFiles);
 
       const result = await this.executeCommand(args);
@@ -123,11 +186,12 @@ export class JavaCliService {
     const tempDir = await mkdtemp(join(tmpdir(), 'puf-extract-'));
     
     try {
-      const binFilePath = join(tempDir, request.binFile.name);
+      const preparedBin = this.prepareFileForCli(request.binFile);
+      const binFilePath = join(tempDir, preparedBin.name);
       const stableFilePath = join(tempDir, request.stableFile.name);
       const outputFile = join(tempDir, 'extracted.key');
 
-      await writeFile(binFilePath, request.binFile.data);
+      await writeFile(binFilePath, preparedBin.data);
       await writeFile(stableFilePath, request.stableFile.data);
 
       const args = [
@@ -136,8 +200,6 @@ export class JavaCliService {
         stableFilePath,
         '--out-file', outputFile
       ];
-
-      if (request.findComma) args.push('--find-comma');
 
       const result = await this.executeCommand(args);
       const extractedKey = await this.readExtractedKey(outputFile);
@@ -160,7 +222,6 @@ export class JavaCliService {
     try {
       const args = ['binary', '--from', request.from];
       
-      if (request.binWidth) args.push('--bin-width', request.binWidth.toString());
       if (request.line && request.input) {
         args.push('--line', request.input);
       } else if (request.files) {
@@ -171,8 +232,6 @@ export class JavaCliService {
         }
         args.push(...tempFiles);
       }
-      
-      if (request.findComma) args.push('--find-comma');
 
       const result = await this.executeCommand(args);
       const generatedFiles = await this.collectOutputFiles(tempDir, tempFiles);
@@ -208,8 +267,6 @@ export class JavaCliService {
         args.push(...tempFiles);
       }
 
-      if (request.findComma) args.push('--find-comma');
-
       const result = await this.executeCommand(args);
       const generatedFiles = await this.collectOutputFiles(tempDir, tempFiles);
 
@@ -240,7 +297,6 @@ export class JavaCliService {
       const args = ['image', '--from', request.from];
       if (request.imageWidth) args.push('--image-width', request.imageWidth.toString());
       if (request.imageHeight) args.push('--image-height', request.imageHeight.toString());
-      if (request.findComma) args.push('--find-comma');
       args.push(...tempFiles);
 
       const result = await this.executeCommand(args);
@@ -265,8 +321,9 @@ export class JavaCliService {
 
     try {
       for (const file of request.files) {
-        const tempFilePath = join(tempDir, file.name);
-        await writeFile(tempFilePath, file.data);
+        const prepared = this.prepareFileForCli(file);
+        const tempFilePath = join(tempDir, prepared.name);
+        await writeFile(tempFilePath, prepared.data);
         tempFiles.push(tempFilePath);
       }
 
@@ -279,7 +336,6 @@ export class JavaCliService {
       if (request.deleteOriginal) args.push('--delete-original');
       if (request.suffix) args.push('--suffix', request.suffix);
       args.push('--output-dir', tempDir);
-      if (request.findComma) args.push('--find-comma');
       args.push(...tempFiles);
 
       const result = await this.executeCommand(args);
@@ -302,8 +358,9 @@ export class JavaCliService {
 
     try {
       for (const file of request.files) {
-        const tempFilePath = join(tempDir, file.name);
-        await writeFile(tempFilePath, file.data);
+        const prepared = this.prepareFileForCli(file);
+        const tempFilePath = join(tempDir, prepared.name);
+        await writeFile(tempFilePath, prepared.data);
         tempFiles.push(tempFilePath);
       }
 
@@ -312,7 +369,6 @@ export class JavaCliService {
       if (request.bits) args.push('--bits', request.bits.toString());
       if (request.regenOriginal) args.push('--regen-original');
       if (request.deleteOriginal) args.push('--delete-original');
-      if (request.findComma) args.push('--find-comma');
       args.push(...tempFiles);
 
       const result = await this.executeCommand(args);
@@ -469,16 +525,18 @@ export class JavaCliService {
 
       child.on('close', (code) => {
         const executionTime = Date.now() - startTime;
-        const hasJavaException = stderr.includes('Exception') || stderr.includes('Error') || stderr.includes('Invalid value');
-        const success = code === 0 && !hasJavaException;
-        
-        if (!success && stderr.trim()) {
-          // Extract meaningful error message from Java stderr
+          // Only treat as failure if exit code is non-zero.
+        // Java may write warnings to stderr even on success.
+        if (code !== 0) {
           const stderrLines = stderr.trim().split('\n');
-          const errorLine = stderrLines.find(l => l.includes('Exception') || l.includes('Error')) || stderrLines[0];
+          const errorLine = stderrLines.find(l =>
+            l.includes('Exception') || l.includes('Error')
+          ) || stderrLines[0] || `Process exited with code ${code}`;
           reject(new Error(`CLI command failed (exit code ${code}): ${errorLine}`));
           return;
         }
+
+        const success = true;
 
         resolve({
           success,
@@ -502,30 +560,58 @@ export class JavaCliService {
     const individualMetrics: PufMetricDto[] = [];
     let totalMetric: TotalMetricDto | null = null;
     let currentMetric: Partial<PufMetricDto> | null = null;
+    let inTotalSection = false;
+    const warningMessages: string[] = [];
+
+    // Safe value extraction after the first colon
+    const parseIntAfterColon = (s: string): number => parseInt(s.split(':').slice(1).join(':').trim()) || 0;
+    const parseFloatAfterColon = (s: string): number => parseFloat(s.split(':').slice(1).join(':').trim()) || 0;
 
     for (const line of lines) {
       const trimmed = line.trim();
-      
-      if (trimmed.startsWith('Bits:')) {
-        if (currentMetric) individualMetrics.push(currentMetric as PufMetricDto);
-        currentMetric = { totalBits: parseInt(trimmed.split(':')[1].trim()) };
-      } else if (trimmed.startsWith('Zeroes:') && currentMetric) {
-        currentMetric.zeroes = parseInt(trimmed.split(':')[1].trim());
-      } else if (trimmed.startsWith('Ones (Hamming Weight):') && currentMetric) {
-        currentMetric.ones = parseInt(trimmed.split(':')[1].trim());
-      } else if (trimmed.startsWith('Bitflips:') && currentMetric) {
-        currentMetric.flips = parseInt(trimmed.split(':')[1].trim());
-      } else if (trimmed.startsWith('Frac Hamming Weight:') && currentMetric) {
-        currentMetric.fractionalHW = parseFloat(trimmed.split(':')[1].trim());
-      } else if (trimmed.startsWith('Bitflip percentage:') && currentMetric) {
-        currentMetric.flipPercentage = parseFloat(trimmed.split(':')[1].trim());
-      } else if (trimmed.startsWith('Shannon Entropy:') && currentMetric) {
-        currentMetric.shannonEntropy = parseFloat(trimmed.split(':')[1].trim());
-      } else if (trimmed.startsWith('Total bitflips:')) {
+
+      // Detect the double separator that marks the start of the total metrics section
+      // The Java output has two "=====...=====" lines before the total metrics
+      if (trimmed.match(/^={10,}$/) && !inTotalSection) {
+        // Finalize any in-progress individual metric before entering total section
+        if (currentMetric && Object.keys(currentMetric).length > 1) {
+          individualMetrics.push(currentMetric as PufMetricDto);
+          currentMetric = null;
+        }
+      }
+
+      // ── Individual metric fields ──
+      if (!inTotalSection && trimmed.startsWith('Bits:')) {
+        if (currentMetric && Object.keys(currentMetric).length > 1) {
+          individualMetrics.push(currentMetric as PufMetricDto);
+        }
+        currentMetric = { totalBits: parseIntAfterColon(trimmed) };
+      } else if (!inTotalSection && trimmed.startsWith('Zeroes:') && currentMetric) {
+        currentMetric.zeroes = parseIntAfterColon(trimmed);
+      } else if (!inTotalSection && trimmed.startsWith('Ones (Hamming Weight):') && currentMetric) {
+        currentMetric.ones = parseIntAfterColon(trimmed);
+      } else if (!inTotalSection && trimmed.startsWith('Bitflips:') && currentMetric) {
+        currentMetric.flips = parseIntAfterColon(trimmed);
+      } else if (!inTotalSection && trimmed.startsWith('Frac Hamming Weight:') && currentMetric) {
+        currentMetric.fractionalHW = parseFloatAfterColon(trimmed);
+      } else if (!inTotalSection && trimmed.startsWith('Bitflip percentage:') && currentMetric) {
+        currentMetric.flipPercentage = parseFloatAfterColon(trimmed);
+      } else if (!inTotalSection && trimmed.startsWith('Shannon Entropy:') && currentMetric) {
+        currentMetric.shannonEntropy = parseFloatAfterColon(trimmed);
+      }
+
+      // ── Total metrics section ──
+      else if (trimmed.startsWith('Total bitflips:')) {
+        inTotalSection = true;
+        // Push any remaining individual metric
+        if (currentMetric && Object.keys(currentMetric).length > 1) {
+          individualMetrics.push(currentMetric as PufMetricDto);
+          currentMetric = null;
+        }
         totalMetric = {
           usedFiles: fileNames.length,
           totalBits: 0,
-          flipsTotal: parseInt(trimmed.split(':')[1].trim()),
+          flipsTotal: parseIntAfterColon(trimmed),
           flipsSame: 0,
           flips1Not2: 0,
           flips2Not1: 0,
@@ -534,24 +620,54 @@ export class JavaCliService {
           fracHammingDistance: 0
         };
       } else if (trimmed.startsWith('Same bitflips:') && totalMetric) {
-        totalMetric.flipsSame = parseInt(trimmed.split(':')[1].trim());
+        totalMetric.flipsSame = parseIntAfterColon(trimmed);
       } else if (trimmed.startsWith('Hamming distance:') && totalMetric) {
-        totalMetric.hammingDist = parseInt(trimmed.split(':')[1].trim());
+        totalMetric.hammingDist = parseIntAfterColon(trimmed);
       } else if (trimmed.startsWith('Frac Hamming distance:') && totalMetric) {
-        totalMetric.fracHammingDistance = parseFloat(trimmed.split(':')[1].trim());
+        totalMetric.fracHammingDistance = parseFloatAfterColon(trimmed);
       } else if (trimmed.startsWith('Jaccard index:') && totalMetric) {
-        totalMetric.jaccardIndex = parseFloat(trimmed.split(':')[1].trim());
+        totalMetric.jaccardIndex = parseFloatAfterColon(trimmed);
+      } else if (trimmed.startsWith('Bitflips in 1 not in 2:') && totalMetric) {
+        totalMetric.flips1Not2 = parseIntAfterColon(trimmed);
+      } else if (trimmed.startsWith('Bitflips in 2 not in 1:') && totalMetric) {
+        totalMetric.flips2Not1 = parseIntAfterColon(trimmed);
+      }
+
+      // Capture size warnings from Java CLI
+      if (trimmed.includes('different lengths')) {
+        warningMessages.push(trimmed);
       }
     }
 
-    if (currentMetric) individualMetrics.push(currentMetric as PufMetricDto);
+    // Finalize last individual metric if still pending
+    if (currentMetric && Object.keys(currentMetric).length > 1) {
+      individualMetrics.push(currentMetric as PufMetricDto);
+    }
 
-    return {
+    // Derive totalBits for the total metric from individual metrics
+    // The Java CLI's TotalMetric.totalBits = sum of per-thread localPufMetrics[0].totalBits
+    // which equals any single individual metric's totalBits (all files share the same bit count)
+    if (totalMetric) {
+      if (individualMetrics.length > 0 && individualMetrics[0]) {
+        totalMetric.totalBits = individualMetrics[0].totalBits;
+      } else if (totalMetric.hammingDist > 0 && totalMetric.fracHammingDistance > 0) {
+        // Back-calculate from fracHammingDistance = hammingDist / totalBits
+        totalMetric.totalBits = Math.round(totalMetric.hammingDist / totalMetric.fracHammingDistance);
+      }
+    }
+
+    const result: PufAnalysisResultDto = {
       totalMetric: totalMetric!,
       individualMetrics,
       filesUsed: fileNames,
       executionTime
     };
+
+    if (warningMessages.length > 0) {
+      result.warningMessages = warningMessages;
+    }
+
+    return result;
   }
 
   private async readStablePositions(filePath: string): Promise<number[]> {

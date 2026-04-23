@@ -13,7 +13,6 @@ interface AugmentRouteBody {
   regenOriginal?: boolean;
   deleteOriginal?: boolean;
   suffix?: string;
-  findComma?: boolean;
 }
 
 interface CorruptRouteBody {
@@ -22,7 +21,6 @@ interface CorruptRouteBody {
   bits?: number;
   regenOriginal?: boolean;
   deleteOriginal?: boolean;
-  findComma?: boolean;
 }
 
 interface FixLFRouteBody {
@@ -60,8 +58,7 @@ export async function dataRoutes(fastify: FastifyInstance) {
           bits: { type: 'number', description: 'Number of bits to consider (default 262144)', default: 262144 },
           regenOriginal: { type: 'boolean', description: 'Regenerate the original truncated file', default: false },
           deleteOriginal: { type: 'boolean', description: 'Delete original after augmentation', default: false },
-          suffix: { type: 'string', description: 'Output file suffix (default _aug)', default: '_aug' },
-          findComma: { type: 'boolean', description: 'Find comma delimiter in data', default: false }
+          suffix: { type: 'string', description: 'Output file suffix (default _aug)', default: '_aug' }
         },
         required: ['files']
       }
@@ -139,8 +136,7 @@ export async function dataRoutes(fastify: FastifyInstance) {
           corruptPercentage: { type: 'number', description: 'Percentage to corrupt (default 15)', default: 15 },
           bits: { type: 'number', description: 'Bits to consider (default 262144)', default: 262144 },
           regenOriginal: { type: 'boolean', description: 'Regenerate original truncated file', default: false },
-          deleteOriginal: { type: 'boolean', description: 'Delete original after corruption', default: false },
-          findComma: { type: 'boolean', description: 'Find comma delimiter in data', default: false }
+          deleteOriginal: { type: 'boolean', description: 'Delete original after corruption', default: false }
         },
         required: ['files']
       }

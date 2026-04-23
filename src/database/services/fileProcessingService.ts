@@ -18,23 +18,20 @@ export interface ProcessingResult {
 
 export class FileProcessingService {
   private static readonly ALLOWED_EXTENSIONS = ['.bin', '.txt'];
-  private static readonly BINARY_PATTERN = /^[01\s\r\n\t]+$/;
 
   static extractDeviceNameFromFilename(filename: string): string {
     const baseName = basename(filename, extname(filename));
     
-    let deviceName = baseName
-      .replace(/([_-]\d+)+$/, '')
-      .replace(/[_-]reading\d*$/i, '')
-      .replace(/[_-](run|test|sample)\d*$/i, '')
-      .replace(/[_-]\d+$/, '');
-    
-    if (!deviceName || deviceName.length === 0) {
-      const match = baseName.match(/^([a-zA-Z_-]+)/);
-      deviceName = match ? match[1] : baseName;
-    }
-    
-    return deviceName.toLowerCase().replace(/[_-]+$/, '');
+    // Device name = everything before the first underscore (case-insensitive, lowercased)
+    // e.g. "stellaris1_26183504_conv" -> "stellaris1"
+    //      "tiva_new1_26181658"       -> "tiva"
+    //      "mydevice"                 -> "mydevice"
+    const underscoreIndex = baseName.indexOf('_');
+    const deviceName = underscoreIndex !== -1
+      ? baseName.substring(0, underscoreIndex)
+      : baseName;
+
+    return deviceName.toLowerCase() || baseName.toLowerCase();
   }
 
   static validateFileExtension(filename: string): boolean {
@@ -42,19 +39,49 @@ export class FileProcessingService {
     return this.ALLOWED_EXTENSIONS.includes(ext);
   }
 
-  static validateBinaryContent(content: string): boolean {
-    const cleanContent = content.replace(/\s/g, '');
-    return this.BINARY_PATTERN.test(content) && cleanContent.length > 0;
+  /**
+   * Check if content is text-encoded binary data (only 0s, 1s, and whitespace).
+   */
+  private static isTextBinaryContent(content: string): boolean {
+    // Must contain at least some 0/1 characters and only consist of 0, 1, whitespace
+    const stripped = content.replace(/\s/g, '');
+    return stripped.length > 0 && /^[01]+$/.test(stripped);
   }
 
+  /**
+   * Check if a raw byte buffer looks like text binary data (ASCII 0x30/0x31 + whitespace).
+   * Returns false for actual binary files that contain byte values outside the text range.
+   */
+  private static isTextBinaryBuffer(data: Buffer): boolean {
+    if (data.length === 0) return false;
+    for (let i = 0; i < data.length; i++) {
+      const byte = data[i];
+      // Only allow ASCII '0' (0x30), '1' (0x31), LF (0x0A), CR (0x0D), space (0x20), tab (0x09)
+      if (byte !== 0x30 && byte !== 0x31 && byte !== 0x0A && byte !== 0x0D && byte !== 0x20 && byte !== 0x09) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Strip everything except '0' and '1' from text content.
+   * Handles newlines, spaces, tabs, carriage returns, and any other non-binary characters.
+   */
   static cleanBinaryData(content: string): string {
-    return content
-      .replace(/\r\n/g, '')
-      .replace(/\n/g, '')
-      .replace(/\r/g, '')
-      .replace(/\t/g, '')
-      .replace(/\s/g, '')
-      .replace(/[^01]/g, '');
+    return content.replace(/[^01]/g, '');
+  }
+
+  /**
+   * Convert raw binary bytes to a binary string representation.
+   * Each byte becomes 8 characters of '0'/'1'.
+   */
+  private static rawBytesToBinaryString(data: Buffer): string {
+    const parts: string[] = new Array(data.length);
+    for (let i = 0; i < data.length; i++) {
+      parts[i] = (data[i] ?? 0).toString(2).padStart(8, '0');
+    }
+    return parts.join('');
   }
 
   static processFile(filePath: string): ProcessingResult {
@@ -68,27 +95,46 @@ export class FileProcessingService {
         };
       }
 
-      const fileContent = readFileSync(filePath, 'utf8');
+      const rawBytes = readFileSync(filePath);
       const fileExtension = extname(filename).toLowerCase();
       
       let binaryData: string;
 
-      if (fileExtension === '.bin') {
-        if (!this.validateBinaryContent(fileContent)) {
+      if (rawBytes.length === 0) {
+        return {
+          success: false,
+          error: `File "${filename}" is empty.`
+        };
+      }
+
+      if (fileExtension === '.txt') {
+        // Text files should contain binary strings: lines of '0' and '1' characters
+        const textContent = rawBytes.toString('utf8');
+        binaryData = this.cleanBinaryData(textContent);
+        
+        if (binaryData.length === 0) {
           return {
             success: false,
-            error: `Binary file "${filename}" contains invalid characters. Only 0s and 1s are allowed.`
+            error: `Text file "${filename}" contains no valid binary data (only 0s and 1s expected).`
           };
         }
-        binaryData = this.cleanBinaryData(fileContent);
-      } else if (fileExtension === '.txt') {
-        if (!this.validateBinaryContent(fileContent)) {
+      } else if (fileExtension === '.bin') {
+        // Binary files can be either:
+        // 1. Text-encoded binary (contains only ASCII 0/1 + whitespace) — treat like .txt
+        // 2. Actual raw binary data — convert each byte to 8-bit representation
+        if (this.isTextBinaryBuffer(rawBytes)) {
+          const textContent = rawBytes.toString('utf8');
+          binaryData = this.cleanBinaryData(textContent);
+        } else {
+          binaryData = this.rawBytesToBinaryString(rawBytes);
+        }
+
+        if (binaryData.length === 0) {
           return {
             success: false,
-            error: `Text file "${filename}" does not contain valid binary data. Only 0s and 1s are allowed.`
+            error: `Binary file "${filename}" contains no valid data after processing.`
           };
         }
-        binaryData = this.cleanBinaryData(fileContent);
       } else {
         return {
           success: false,
@@ -96,15 +142,9 @@ export class FileProcessingService {
         };
       }
 
-      if (binaryData.length === 0) {
-        return {
-          success: false,
-          error: `File "${filename}" contains no valid binary data after processing.`
-        };
-      }
-
       const deviceName = this.extractDeviceNameFromFilename(filename);
-      const fileSize = Buffer.byteLength(binaryData, 'utf8');
+      // fileSize = number of bits (length of the binary string)
+      const fileSize = binaryData.length;
 
       return {
         success: true,
